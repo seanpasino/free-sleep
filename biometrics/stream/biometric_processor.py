@@ -103,7 +103,7 @@ class BiometricProcessor:
         self.runtime_params = runtime_params
         self.init_tracking()
         self.no_presence_tolerance = 10
-        self.present_tolerance = 5  # Consecutive above-threshold seconds required before declaring presence
+        self.present_tolerance = 30  # Consecutive above-threshold seconds required before declaring presence
         self.breathing_rate = 0
         self.hrv = 0
         self.not_present_for = 0
