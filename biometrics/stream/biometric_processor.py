@@ -169,7 +169,7 @@ class BiometricProcessor:
                 time.sleep(retry_delay)
 
     def detect_presence(self, signal: np.ndarray):
-        signal_range = np.ptp(signal)
+        signal_range = np.ptp(signal.astype(np.int64))
         if signal_range > 200_000:
             self.not_present_for = 0
             self.present_for = self.present_for + 1
