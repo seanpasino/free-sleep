@@ -43,7 +43,7 @@ def convert_timestamps(data: List[SleepRecord]) -> List[SleepRecord]:
         formatted_entry: SleepRecord = {
             "side": entry["side"],
             "entered_bed_at": datetime.fromisoformat(entry["entered_bed_at"]),
-            "left_bed_at": datetime.fromisoformat(entry["left_bed_at"]),
+            "left_bed_at": datetime.fromisoformat(entry["left_bed_at"]) if entry["left_bed_at"] is not None else None,
             "sleep_period_seconds": entry["sleep_period_seconds"],
             "times_exited_bed": entry["times_exited_bed"],
             "present_intervals": [

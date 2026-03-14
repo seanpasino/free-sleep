@@ -29,6 +29,7 @@ if platform.system().lower() == 'linux':
 
 import time
 import os
+import shutil
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 import queue
@@ -242,6 +243,15 @@ def process_biometrics():
             update_health('stream', 'failed', repr(error))
 
 
+def _check_disk_space(path='/persistent', warn_pct=90, critical_pct=95):
+    usage = shutil.disk_usage(path)
+    pct = usage.used / usage.total * 100
+    if pct >= critical_pct:
+        logger.error(f'Disk usage critical: {pct:.1f}% on {path} ({usage.free // 1024 ** 2} MB free)')
+    elif pct >= warn_pct:
+        logger.warning(f'Disk usage high: {pct:.1f}% on {path} ({usage.free // 1024 ** 2} MB free)')
+
+
 def watch_directory(directory="/persistent"):
     """Monitors the directory for new RAW files and processes only the latest one."""
     logger.info('Steam processor starting...')
@@ -259,6 +269,7 @@ def watch_directory(directory="/persistent"):
     try:
         while True:
             time.sleep(1)
+            _check_disk_space()
             handler.track_latest_file()  # Check if a newer file exists
             handler.follow_latest_file()  # Read new CBOR entries line-by-line
     except KeyboardInterrupt:
