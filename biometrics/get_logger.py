@@ -173,7 +173,7 @@ def _init_sentry():
     if _is_sentry_enabled():
 
         sentry_sdk.init(
-            dsn="https://71dec16dc7338369a770c424783d1712@o4510246020710401.ingest.us.sentry.io/4510252550979584",
+            dsn=os.environ.get('SENTRY_DSN', 'https://71dec16dc7338369a770c424783d1712@o4510246020710401.ingest.us.sentry.io/4510252550979584'),
             # Add data like request headers and IP for users,
             # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
             send_default_pii=False,

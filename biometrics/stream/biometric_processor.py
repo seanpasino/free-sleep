@@ -18,6 +18,7 @@ Instantiate `BiometricProcessor` and call `calculate_vitals(epoch, signal1, sign
 with sensor data to process and extract biometric metrics.
 """
 import datetime
+import time
 import gc
 from typing import Union, Tuple, TypedDict, List, Optional, Deque
 import traceback
@@ -123,47 +124,49 @@ class BiometricProcessor:
         self.iteration_count = 0
         self.init_tracking()
 
-    def _update_presence_api(self, is_present: bool):
+    def _update_presence_api(self, is_present: bool, retries: int = 3, retry_delay: float = 2.0):
         """
-        Send presence update to the API endpoint.
+        Send presence update to the API endpoint with retry logic.
 
         Args:
             is_present: Boolean indicating if presence is detected
+            retries: Number of attempts before giving up
+            retry_delay: Seconds to wait between attempts
         """
-        try:
-            # Build the payload based on which side this processor handles
-            payload = {
-                self.side: {
-                    "present": is_present,
-                }
+        payload = {
+            self.side: {
+                "present": is_present,
             }
+        }
+        data = json.dumps(payload).encode('utf-8')
 
-            # Convert payload to JSON bytes
-            data = json.dumps(payload).encode('utf-8')
+        for attempt in range(1, retries + 1):
+            try:
+                req = urllib.request.Request(
+                    self.presence_api_url,
+                    data=data,
+                    headers={'Content-Type': 'application/json'},
+                    method='POST'
+                )
+                with urllib.request.urlopen(req, timeout=2) as response:
+                    if response.status == 200:
+                        logger.debug(f'Successfully updated presence API for {self.side} side: {is_present}')
+                        return
+                    else:
+                        response_body = response.read().decode('utf-8')
+                        logger.warning(f'Presence API returned status {response.status}: {response_body}')
+                        return
 
-            # Create the request
-            req = urllib.request.Request(
-                self.presence_api_url,
-                data=data,
-                headers={'Content-Type': 'application/json'},
-                method='POST'
-            )
-
-            # Make the request with timeout
-            with urllib.request.urlopen(req, timeout=2) as response:
-                if response.status == 200:
-                    logger.debug(f'Successfully updated presence API for {self.side} side: {is_present}')
+            except urllib.error.URLError as e:
+                if isinstance(e.reason, TimeoutError):
+                    logger.warning(f'Presence API timed out for {self.side} (attempt {attempt}/{retries})')
                 else:
-                    response_body = response.read().decode('utf-8')
-                    logger.warning(f'Presence API returned status {response.status}: {response_body}')
+                    logger.warning(f'Could not connect to presence API for {self.side} (attempt {attempt}/{retries}): {e.reason}')
+            except Exception as e:
+                logger.error(f'Error updating presence API for {self.side} (attempt {attempt}/{retries}): {e}')
 
-        except urllib.error.URLError as e:
-            if isinstance(e.reason, TimeoutError):
-                logger.warning(f'Presence API request timed out for {self.side} side')
-            else:
-                logger.warning(f'Could not connect to presence API at {self.presence_api_url}: {e.reason}')
-        except Exception as e:
-            logger.error(f'Error updating presence API: {e}')
+            if attempt < retries:
+                time.sleep(retry_delay)
 
     def detect_presence(self, signal: np.ndarray):
         signal_range = np.ptp(signal)
@@ -213,7 +216,7 @@ class BiometricProcessor:
                 500,
                 breathing_method='fft',
                 bpmmin=40,
-                bpmmax=90,
+                bpmmax=100,
                 windowsize=self.window_size,
                 calculate_breathing=update_breathing,
             )
@@ -322,7 +325,7 @@ class BiometricProcessor:
         if np.isnan(measurement['bpm']):
             return False
 
-        if measurement['bpm'] > 90:
+        if measurement['bpm'] > 100:
             return False
         if self.lower_bound is not None and self.upper_bound is not None:
             if self.lower_bound < measurement['bpm'] < self.upper_bound:

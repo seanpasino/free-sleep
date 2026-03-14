@@ -129,7 +129,8 @@ def insert_sleep_records(sleep_records: List[SleepRecord]):
         for sleep_record in sleep_records:
             side = sleep_record['side']
             entered_bed_at = int(sleep_record['entered_bed_at'].timestamp())
-            left_bed_at = int(sleep_record.get('left_bed_at').timestamp())
+            left_bed_at_dt = sleep_record.get('left_bed_at')
+            left_bed_at = int(left_bed_at_dt.timestamp()) if left_bed_at_dt is not None else None
             sleep_period_seconds = sleep_record.get('sleep_period_seconds', 0)
             times_exited_bed = sleep_record.get('times_exited_bed', 0)
 
