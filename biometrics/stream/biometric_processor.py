@@ -103,6 +103,7 @@ class BiometricProcessor:
         self.runtime_params = runtime_params
         self.init_tracking()
         self.no_presence_tolerance = 10
+        self.present_tolerance = 5  # Consecutive above-threshold seconds required before declaring presence
         self.breathing_rate = 0
         self.hrv = 0
         self.not_present_for = 0
@@ -172,20 +173,18 @@ class BiometricProcessor:
         signal_range = np.ptp(signal.astype(np.int64))
         if signal_range > 200_000:
             self.not_present_for = 0
-            self.present_for = self.present_for + 1
+            self.present_for += 1
 
-            # Update presence to True if not already set
-            if not self.present:
+            if not self.present and self.present_for >= self.present_tolerance:
+                logger.info(f'User detected for {self.present_tolerance} consecutive seconds on {self.side} side, marking present...')
                 self.present = True
                 self._update_presence_api(True)
-            else:
-                self.present = True
         else:
             self.not_present_for += 1
+            self.present_for = 0  # Reset streak on any below-threshold second
             if self.not_present_for == self.no_presence_tolerance:
                 logger.info(f'User not detected for {self.no_presence_tolerance} seconds on {self.side} side, resetting...')
                 self.present = False
-                self.present_for = 0
                 self.reset()
 
                 # Update API that presence is no longer detected
