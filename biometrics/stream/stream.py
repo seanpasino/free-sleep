@@ -21,7 +21,7 @@ import sys
 import platform
 import struct
 import cbor2
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 if platform.system().lower() == 'linux':
     sys.path.append('/home/dac/free-sleep/biometrics/')
@@ -190,13 +190,13 @@ class LatestRawFileHandler(FileSystemEventHandler):
                     continue  # empty placeholder record
 
                 decoded_data = cbor2.loads(data_bytes)
-                two_minutes_ago = datetime.now() - timedelta(minutes=2)
+                two_minutes_ago = datetime.now(timezone.utc) - timedelta(minutes=2)
 
                 if not isinstance(decoded_data, dict) or decoded_data.get('type') != 'piezo-dual':
                     self.last_pos = self.latest_file_obj.tell()
                     continue
 
-                record_time = datetime.fromtimestamp(decoded_data['ts'])
+                record_time = datetime.fromtimestamp(decoded_data['ts'], timezone.utc)
                 if two_minutes_ago > record_time:
                     self.last_pos = self.latest_file_obj.tell()
                     continue
