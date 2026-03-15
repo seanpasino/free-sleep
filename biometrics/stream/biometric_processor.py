@@ -113,11 +113,12 @@ class BiometricProcessor:
 
         # Cap-based presence gating (dual EMA to separate human from pets)
         self.CAP_FAST_ALPHA = 0.1       # Fast EMA: tracks cap changes in ~5 seconds
-        self.CAP_SLOW_ALPHA = 0.002     # Slow EMA: stable empty-bed baseline
+        self.CAP_SLOW_ALPHA = 0.002     # Slow EMA: very sticky once established
         self.CAP_STABLE_THRESHOLD = 30  # Max fast-slow deviation to allow baseline update
         self.CAP_STD = 10.0             # Fixed std for normalising the score
         self.CAP_SCORE_THRESHOLD = 15.0 # Combined score required to confirm human presence
-        self.CAP_MIN_SAMPLES = 20       # Warmup samples before cap gate is active
+        self.CAP_INIT_PERIOD = 120      # Samples where both EMAs use fast alpha (60s at 2Hz)
+        self.CAP_MIN_SAMPLES = 120      # Gate disabled until warmup is complete
         self.cap_fast = None            # Fast EMA {out, cen, in_}
         self.cap_slow = None            # Slow EMA baseline {out, cen, in_}
         self.cap_baseline_samples = 0
@@ -215,9 +216,18 @@ class BiometricProcessor:
         dev_cen = abs(self.cap_fast['cen'] - self.cap_slow['cen'])
         dev_in  = abs(self.cap_fast['in']  - self.cap_slow['in'])
 
-        # Only update slow baseline when readings are stable (empty bed or pet)
-        if dev_out < self.CAP_STABLE_THRESHOLD and dev_cen < self.CAP_STABLE_THRESHOLD and dev_in < self.CAP_STABLE_THRESHOLD:
+        # During the init period both EMAs use fast alpha so they converge
+        # together, preventing startup transients (e.g. animals repositioning
+        # at service start) from polluting the slow baseline.
+        if self.cap_baseline_samples <= self.CAP_INIT_PERIOD:
+            sa = self.CAP_FAST_ALPHA
+        elif dev_out < self.CAP_STABLE_THRESHOLD and dev_cen < self.CAP_STABLE_THRESHOLD and dev_in < self.CAP_STABLE_THRESHOLD:
+            # Only update slow baseline when readings are stable (empty bed or pet)
             sa = self.CAP_SLOW_ALPHA
+        else:
+            sa = None  # Don't update slow — large deviation means someone is present
+
+        if sa is not None:
             self.cap_slow['out'] = (1 - sa) * self.cap_slow['out'] + sa * out
             self.cap_slow['cen'] = (1 - sa) * self.cap_slow['cen'] + sa * cen
             self.cap_slow['in']  = (1 - sa) * self.cap_slow['in']  + sa * in_
@@ -228,28 +238,41 @@ class BiometricProcessor:
     def detect_presence(self, signal: np.ndarray):
         signal_range = np.ptp(signal.astype(np.int64))
 
-        # Cap gate: disabled during warmup (no baseline yet), otherwise require
-        # a minimum combined score to distinguish humans from pets.
-        cap_confirmed = (self.cap_baseline_samples < self.CAP_MIN_SAMPLES) or (self.last_cap_score >= self.CAP_SCORE_THRESHOLD)
-
-        if signal_range > 500_000 and cap_confirmed:
-            self.not_present_for = 0
-            self.present_for += 1
-
-            if not self.present and self.present_for >= self.present_tolerance:
-                logger.info(f'User detected for {self.present_tolerance} consecutive seconds on {self.side} side (cap_score={self.last_cap_score:.1f}), marking present...')
-                self.present = True
-                self._update_presence_api(True)
+        if self.present:
+            # Presence already confirmed: only piezo needed to maintain it.
+            # Cap is not re-checked here because the slow EMA may have anchored
+            # to the current occupant's values, making the cap score unreliable.
+            if signal_range > 500_000:
+                self.not_present_for = 0
+            else:
+                self.not_present_for += 1
+                self.present_for = 0
+                if self.not_present_for == self.no_presence_tolerance:
+                    logger.info(f'User not detected for {self.no_presence_tolerance} seconds on {self.side} side, resetting...')
+                    self.present = False
+                    self.reset()
+                    self._update_presence_api(False)
         else:
-            self.not_present_for += 1
-            self.present_for = 0  # Reset streak on any below-threshold second
-            if self.not_present_for == self.no_presence_tolerance:
-                logger.info(f'User not detected for {self.no_presence_tolerance} seconds on {self.side} side, resetting...')
-                self.present = False
-                self.reset()
+            # Not yet present: require both piezo and cap for initial detection.
+            # Cap gate is inactive during the 60-second warmup period.
+            cap_confirmed = (self.cap_baseline_samples < self.CAP_MIN_SAMPLES) or (self.last_cap_score >= self.CAP_SCORE_THRESHOLD)
 
-                # Update API that presence is no longer detected
-                self._update_presence_api(False)
+            if signal_range > 500_000 and cap_confirmed:
+                self.not_present_for = 0
+                self.present_for += 1
+
+                if self.present_for >= self.present_tolerance:
+                    logger.info(f'User detected for {self.present_tolerance} consecutive seconds on {self.side} side (cap_score={self.last_cap_score:.1f}), marking present...')
+                    self.present = True
+                    self._update_presence_api(True)
+            else:
+                self.not_present_for += 1
+                self.present_for = 0
+                if self.not_present_for == self.no_presence_tolerance:
+                    logger.info(f'User not detected for {self.no_presence_tolerance} seconds on {self.side} side, resetting...')
+                    self.present = False
+                    self.reset()
+                    self._update_presence_api(False)
 
     def _calculate_vitals(self, signal: np.ndarray, epoch: int, update_breathing=False, update_hrv=False):
         try:
