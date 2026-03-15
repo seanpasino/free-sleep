@@ -111,6 +111,18 @@ class BiometricProcessor:
         self.combined_measurements: Deque[Measurement] = deque([], maxlen=100)
         self.debug_measurements: List[Measurement] = []
 
+        # Cap-based presence gating (dual EMA to separate human from pets)
+        self.CAP_FAST_ALPHA = 0.1       # Fast EMA: tracks cap changes in ~5 seconds
+        self.CAP_SLOW_ALPHA = 0.002     # Slow EMA: stable empty-bed baseline
+        self.CAP_STABLE_THRESHOLD = 30  # Max fast-slow deviation to allow baseline update
+        self.CAP_STD = 10.0             # Fixed std for normalising the score
+        self.CAP_SCORE_THRESHOLD = 15.0 # Combined score required to confirm human presence
+        self.CAP_MIN_SAMPLES = 20       # Warmup samples before cap gate is active
+        self.cap_fast = None            # Fast EMA {out, cen, in_}
+        self.cap_slow = None            # Slow EMA baseline {out, cen, in_}
+        self.cap_baseline_samples = 0
+        self.last_cap_score = 0.0
+
     def init_tracking(self):
         # Running metrics
         self.heart_rates:  Deque[float] = deque([], maxlen=self.moving_avg_size)
@@ -169,14 +181,63 @@ class BiometricProcessor:
             if attempt < retries:
                 time.sleep(retry_delay)
 
+    def update_cap(self, cap_record: dict):
+        """Update dual-EMA cap baseline and compute a human-presence score.
+
+        Uses a fast EMA to track current cap readings and a slow EMA as a
+        stable empty-bed baseline. The slow EMA only updates when the fast
+        and slow EMAs are close (bed is empty / dog present), so it stays
+        anchored to empty-bed values even during a full night of sleep.
+        A human body causes a sustained 100-300+ count deviation across
+        sensors; a dog causes essentially zero deviation.
+        """
+        side_data = cap_record.get(self.side, {})
+        if not side_data or side_data.get('status') != 'good':
+            return
+
+        out = float(side_data.get('out', 0))
+        cen = float(side_data.get('cen', 0))
+        in_ = float(side_data.get('in', 0))
+
+        self.cap_baseline_samples += 1
+
+        if self.cap_fast is None:
+            self.cap_fast = {'out': out, 'cen': cen, 'in': in_}
+            self.cap_slow = {'out': out, 'cen': cen, 'in': in_}
+            return
+
+        fa = self.CAP_FAST_ALPHA
+        self.cap_fast['out'] = (1 - fa) * self.cap_fast['out'] + fa * out
+        self.cap_fast['cen'] = (1 - fa) * self.cap_fast['cen'] + fa * cen
+        self.cap_fast['in'] = (1 - fa) * self.cap_fast['in'] + fa * in_
+
+        dev_out = abs(self.cap_fast['out'] - self.cap_slow['out'])
+        dev_cen = abs(self.cap_fast['cen'] - self.cap_slow['cen'])
+        dev_in  = abs(self.cap_fast['in']  - self.cap_slow['in'])
+
+        # Only update slow baseline when readings are stable (empty bed or pet)
+        if dev_out < self.CAP_STABLE_THRESHOLD and dev_cen < self.CAP_STABLE_THRESHOLD and dev_in < self.CAP_STABLE_THRESHOLD:
+            sa = self.CAP_SLOW_ALPHA
+            self.cap_slow['out'] = (1 - sa) * self.cap_slow['out'] + sa * out
+            self.cap_slow['cen'] = (1 - sa) * self.cap_slow['cen'] + sa * cen
+            self.cap_slow['in']  = (1 - sa) * self.cap_slow['in']  + sa * in_
+
+        if self.cap_baseline_samples >= self.CAP_MIN_SAMPLES:
+            self.last_cap_score = (dev_out + dev_cen + dev_in) / self.CAP_STD
+
     def detect_presence(self, signal: np.ndarray):
         signal_range = np.ptp(signal.astype(np.int64))
-        if signal_range > 500_000:
+
+        # Cap gate: disabled during warmup (no baseline yet), otherwise require
+        # a minimum combined score to distinguish humans from pets.
+        cap_confirmed = (self.cap_baseline_samples < self.CAP_MIN_SAMPLES) or (self.last_cap_score >= self.CAP_SCORE_THRESHOLD)
+
+        if signal_range > 500_000 and cap_confirmed:
             self.not_present_for = 0
             self.present_for += 1
 
             if not self.present and self.present_for >= self.present_tolerance:
-                logger.info(f'User detected for {self.present_tolerance} consecutive seconds on {self.side} side, marking present...')
+                logger.info(f'User detected for {self.present_tolerance} consecutive seconds on {self.side} side (cap_score={self.last_cap_score:.1f}), marking present...')
                 self.present = True
                 self._update_presence_api(True)
         else:

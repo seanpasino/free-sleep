@@ -192,7 +192,8 @@ class LatestRawFileHandler(FileSystemEventHandler):
                 decoded_data = cbor2.loads(data_bytes)
                 two_minutes_ago = datetime.now(timezone.utc) - timedelta(minutes=2)
 
-                if not isinstance(decoded_data, dict) or decoded_data.get('type') != 'piezo-dual':
+                record_type = decoded_data.get('type') if isinstance(decoded_data, dict) else None
+                if record_type not in ('piezo-dual', 'capSense'):
                     self.last_pos = self.latest_file_obj.tell()
                     continue
 
@@ -201,7 +202,8 @@ class LatestRawFileHandler(FileSystemEventHandler):
                     self.last_pos = self.latest_file_obj.tell()
                     continue
 
-                load_piezo_row(decoded_data, 'right')
+                if record_type == 'piezo-dual':
+                    load_piezo_row(decoded_data, 'right')
                 piezo_record_queue.put(decoded_data)
 
                 # Update last read position
@@ -218,8 +220,19 @@ class LatestRawFileHandler(FileSystemEventHandler):
 
 
 def process_biometrics():
-    piezo_record = piezo_record_queue.get()
-    stream_processor = StreamProcessor(piezo_record, debug=False)
+    # Wait for the first piezo-dual record to initialise StreamProcessor
+    # (it needs a piezo record to detect sensor count). Cap records arriving
+    # before the first piezo record are discarded.
+    stream_processor = None
+    while stream_processor is None:
+        record = piezo_record_queue.get()
+        if record is None:
+            return
+        if record.get('type') == 'piezo-dual':
+            stream_processor = StreamProcessor(record, debug=False)
+            stream_processor.process_piezo_record(record)
+            piezo_record_queue.task_done()
+
     ix = 0
     while True:
         ix += 1
@@ -227,13 +240,17 @@ def process_biometrics():
             update_health('stream', 'healthy')
             ix = 0
         try:
-            piezo_record = piezo_record_queue.get(timeout=5)
+            record = piezo_record_queue.get(timeout=5)
 
-            if piezo_record is None:
+            if record is None:
                 # Stop if None is received
                 break
 
-            stream_processor.process_piezo_record(piezo_record)
+            if record.get('type') == 'piezo-dual':
+                stream_processor.process_piezo_record(record)
+            elif record.get('type') == 'capSense':
+                stream_processor.process_cap_record(record)
+
             piezo_record_queue.task_done()
         except queue.Empty:
             # Just continue if the queue is empty, do not exit the loop

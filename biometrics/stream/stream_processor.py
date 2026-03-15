@@ -48,6 +48,10 @@ class StreamProcessor:
         self.left_processor.detect_presence(left1_signal)
         self.right_processor.detect_presence(right1_signal)
 
+    def process_cap_record(self, cap_record: dict):
+        self.left_processor.update_cap(cap_record)
+        self.right_processor.update_cap(cap_record)
+
     def can_calculate_breath_rate(self):
         return (
             self.iteration_count > self.left_processor.breath_rate_window_seconds
