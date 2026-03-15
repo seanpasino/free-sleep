@@ -171,7 +171,7 @@ class BiometricProcessor:
 
     def detect_presence(self, signal: np.ndarray):
         signal_range = np.ptp(signal.astype(np.int64))
-        if signal_range > 200_000:
+        if signal_range > 500_000:
             self.not_present_for = 0
             self.present_for += 1
 
