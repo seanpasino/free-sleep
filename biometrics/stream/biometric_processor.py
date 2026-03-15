@@ -238,41 +238,29 @@ class BiometricProcessor:
     def detect_presence(self, signal: np.ndarray):
         signal_range = np.ptp(signal.astype(np.int64))
 
-        if self.present:
-            # Presence already confirmed: only piezo needed to maintain it.
-            # Cap is not re-checked here because the slow EMA may have anchored
-            # to the current occupant's values, making the cap score unreliable.
-            if signal_range > 500_000:
-                self.not_present_for = 0
-            else:
-                self.not_present_for += 1
-                self.present_for = 0
-                if self.not_present_for == self.no_presence_tolerance:
-                    logger.info(f'User not detected for {self.no_presence_tolerance} seconds on {self.side} side, resetting...')
-                    self.present = False
-                    self.reset()
-                    self._update_presence_api(False)
+        # Cap gate is inactive during the 60-second warmup period.
+        # After warmup, the slow EMA stays anchored at empty-bed values (the
+        # high deviation while a person is present blocks slow EMA updates),
+        # so cap_score reliably stays high while a human is present and drops
+        # to ~0 within seconds of them leaving — even with pets still on the bed.
+        cap_confirmed = (self.cap_baseline_samples < self.CAP_MIN_SAMPLES) or (self.last_cap_score >= self.CAP_SCORE_THRESHOLD)
+
+        if signal_range > 500_000 and cap_confirmed:
+            self.not_present_for = 0
+            self.present_for += 1
+
+            if not self.present and self.present_for >= self.present_tolerance:
+                logger.info(f'User detected for {self.present_tolerance} consecutive seconds on {self.side} side (cap_score={self.last_cap_score:.1f}), marking present...')
+                self.present = True
+                self._update_presence_api(True)
         else:
-            # Not yet present: require both piezo and cap for initial detection.
-            # Cap gate is inactive during the 60-second warmup period.
-            cap_confirmed = (self.cap_baseline_samples < self.CAP_MIN_SAMPLES) or (self.last_cap_score >= self.CAP_SCORE_THRESHOLD)
-
-            if signal_range > 500_000 and cap_confirmed:
-                self.not_present_for = 0
-                self.present_for += 1
-
-                if self.present_for >= self.present_tolerance:
-                    logger.info(f'User detected for {self.present_tolerance} consecutive seconds on {self.side} side (cap_score={self.last_cap_score:.1f}), marking present...')
-                    self.present = True
-                    self._update_presence_api(True)
-            else:
-                self.not_present_for += 1
-                self.present_for = 0
-                if self.not_present_for == self.no_presence_tolerance:
-                    logger.info(f'User not detected for {self.no_presence_tolerance} seconds on {self.side} side, resetting...')
-                    self.present = False
-                    self.reset()
-                    self._update_presence_api(False)
+            self.not_present_for += 1
+            self.present_for = 0
+            if self.not_present_for == self.no_presence_tolerance:
+                logger.info(f'User not detected for {self.no_presence_tolerance} seconds on {self.side} side, resetting...')
+                self.present = False
+                self.reset()
+                self._update_presence_api(False)
 
     def _calculate_vitals(self, signal: np.ndarray, epoch: int, update_breathing=False, update_hrv=False):
         try:
