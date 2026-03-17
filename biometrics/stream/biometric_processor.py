@@ -116,7 +116,7 @@ class BiometricProcessor:
         self.CAP_SLOW_ALPHA = 0.002     # Slow EMA: very sticky once established
         self.CAP_STABLE_THRESHOLD = 30  # Max fast-slow deviation to allow baseline update
         self.CAP_STD = 10.0             # Fixed std for normalising the score
-        self.CAP_SCORE_THRESHOLD = 60.0 # Combined score required to confirm human presence
+        self.CAP_SCORE_THRESHOLD = 150.0 # Combined score required to confirm human presence
         self.CAP_INIT_PERIOD = 120      # Samples where both EMAs use fast alpha (60s at 2Hz)
         self.CAP_MIN_SAMPLES = 120      # Gate disabled until warmup is complete
         self.cap_fast = None            # Fast EMA {out, cen, in_}
