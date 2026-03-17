@@ -239,10 +239,10 @@ class BiometricProcessor:
         signal_range = np.ptp(signal.astype(np.int64))
 
         # Cap gate is inactive during the 60-second warmup period.
-        # After warmup, the slow EMA stays anchored at empty-bed values (the
-        # high deviation while a person is present blocks slow EMA updates),
-        # so cap_score reliably stays high while a human is present and drops
-        # to ~0 within seconds of them leaving — even with pets still on the bed.
+        # The slow EMA is re-anchored to empty-bed values each time presence
+        # clears, so cap_score reliably stays high while a human is present
+        # and drops to ~0 within seconds of them leaving — even with pets on
+        # the bed.
         cap_confirmed = (self.cap_baseline_samples < self.CAP_MIN_SAMPLES) or (self.last_cap_score >= self.CAP_SCORE_THRESHOLD)
 
         if signal_range > 500_000 and cap_confirmed:
@@ -259,6 +259,13 @@ class BiometricProcessor:
             if self.not_present_for == self.no_presence_tolerance:
                 logger.info(f'User not detected for {self.no_presence_tolerance} seconds on {self.side} side, resetting...')
                 self.present = False
+                # Re-anchor slow EMA to current readings so the baseline
+                # reflects empty-bed (± pets) rather than stale human-sleeping
+                # values that would cause false positives on the next cycle.
+                if self.cap_fast is not None:
+                    self.cap_slow = dict(self.cap_fast)
+                    self.last_cap_score = 0.0
+                    logger.info(f'Cap baseline reset on {self.side}: out={self.cap_slow["out"]:.0f} cen={self.cap_slow["cen"]:.0f} in={self.cap_slow["in"]:.0f}')
                 self.reset()
                 self._update_presence_api(False)
 
