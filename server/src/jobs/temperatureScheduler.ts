@@ -1,4 +1,5 @@
 import schedule from 'node-schedule';
+import moment from 'moment-timezone';
 
 import { DailySchedule, DayOfWeek, Side, Time } from '../db/schedulesSchema.js';
 import { getDayIndexForSchedule, logJob } from './utils.js';
@@ -6,6 +7,7 @@ import { Settings } from '../db/settingsSchema.js';
 import { TimeZone } from '../db/timeZones.js';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
 import serverStatus from '../serverStatus.js';
+import settingsDB from '../db/settings.js';
 import logger from '../logger.js';
 
 
@@ -23,8 +25,18 @@ const scheduleAdjustment = (timeZone: TimeZone, side: Side, day: DayOfWeek, time
 
   schedule.scheduleJob(`${side}-${day}-${time}-${temperature}-temperature-adjustment`, onRule, async () => {
     try {
-
       logJob('Executing temperature adjustment job', side, day, dayOfWeekIndex, time);
+
+      await settingsDB.read();
+      if (settingsDB.data[side].scheduleOverrides.temperatureSchedules.expiresAt) {
+        const expiresAt = moment(settingsDB.data[side].scheduleOverrides.temperatureSchedules.expiresAt);
+        const now = moment();
+        if (expiresAt.isAfter(now)) {
+          logJob(`Detected temperature schedule override! Skipping temperature adjustment! Override expires at: ${expiresAt.format()}`, side, day, dayOfWeekIndex, time);
+          return;
+        }
+      }
+
       await updateDeviceStatus({
         [side]: {
           targetTemperatureF: temperature,
