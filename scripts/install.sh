@@ -4,11 +4,16 @@ set -euo pipefail
 
 # --------------------------------------------------------------------------------
 # Variables
-REPO_URL="https://github.com/throwaway31265/free-sleep/archive/refs/heads/main.zip"
+REPO_OWNER="seanpasino"
+REPO_BRANCH="seanpasino/personal"
+REPO_URL="https://github.com/${REPO_OWNER}/free-sleep/archive/refs/heads/${REPO_BRANCH}.zip"
 ZIP_FILE="free-sleep.zip"
 REPO_DIR="/home/dac/free-sleep"
 SERVER_DIR="$REPO_DIR/server"
 USERNAME="dac"
+# GitHub names the extracted folder "<repo>-<branch>", with '/' replaced by '-'
+# (e.g. branch "seanpasino/personal" -> "free-sleep-seanpasino-personal").
+EXTRACTED_DIR="free-sleep-${REPO_BRANCH//\//-}"
 
 # --------------------------------------------------------------------------------
 # Download the repository
@@ -24,7 +29,7 @@ rm -f "$ZIP_FILE"
 # Clean up existing directory and move new code into place
 echo "Setting up the installation directory..."
 rm -rf "$REPO_DIR"
-mv free-sleep-main "$REPO_DIR"
+mv "$EXTRACTED_DIR" "$REPO_DIR"
 
 
 chown -R "$USERNAME":"$USERNAME" "$REPO_DIR"

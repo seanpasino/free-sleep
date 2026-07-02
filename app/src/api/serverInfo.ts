@@ -16,7 +16,7 @@ type LatestVersion = {
 
 export const getLatestVersion = async () => {
   return axios.get<LatestVersion>(
-    'https://raw.githubusercontent.com/throwaway31265/free-sleep/main/server/src/serverInfo.json'
+    'https://raw.githubusercontent.com/seanpasino/free-sleep/seanpasino/personal/server/src/serverInfo.json'
   );
 };
 
