@@ -10,6 +10,7 @@ import { formatTemperature } from '@lib/temperatureConversions.ts';
 
 type TemperatureLabelProps = {
   isOn: boolean;
+  isActive?: boolean | null;
   sliderTemp: number;
   sliderColor: string;
   currentTargetTemp: number;
@@ -20,6 +21,7 @@ type TemperatureLabelProps = {
 
 export default function TemperatureLabel({
   isOn,
+  isActive,
   sliderTemp,
   sliderColor,
   currentTargetTemp,
@@ -48,6 +50,10 @@ export default function TemperatureLabel({
     } else {
       topTitle = '';
     }
+  } else if (isActive === false) {
+    // Commanded on, but the pump/TEC hasn't physically engaged yet (the firmware
+    // defers actuation for a couple minutes — anti-short-cycle protection).
+    topTitle = 'Starting…';
   } else {
     if (currentTemperatureF < currentTargetTemp) {
       topTitle = 'Warming to';

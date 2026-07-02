@@ -314,6 +314,7 @@ const createDeviceStatus = (): DeviceStatus => ({
     targetTemperatureF: 84,
     secondsRemaining: 1_200,
     isOn: true,
+    isActive: true,
     isAlarmVibrating: false,
   },
   right: {
@@ -322,6 +323,7 @@ const createDeviceStatus = (): DeviceStatus => ({
     targetTemperatureF: 86,
     secondsRemaining: 1_560,
     isOn: true,
+    isActive: true,
     isAlarmVibrating: false,
   },
   waterLevel: 'true',

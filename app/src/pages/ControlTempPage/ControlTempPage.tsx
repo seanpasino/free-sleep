@@ -49,6 +49,7 @@ export default function ControlTempPage() {
     >
       <Slider
         isOn={ isOn }
+        isActive={ sideStatus?.isActive }
         currentTargetTemp={ sideStatus?.targetTemperatureF || 55 }
         refetch={ refetch }
         currentTemperatureF={ sideStatus?.currentTemperatureF || 55 }

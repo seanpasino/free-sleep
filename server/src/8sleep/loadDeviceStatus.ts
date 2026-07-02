@@ -9,6 +9,7 @@ import _ from 'lodash';
 import serverInfo from '../serverInfo.json' with { type: 'json' };
 import { WIFI_SIGNAL_STRENGTH } from './wifiSignalStrength.js';
 import { GestureSchema } from '../db/settingsSchema.js';
+import { getHeatActive } from './heatState.js';
 
 
 
@@ -164,6 +165,7 @@ export async function loadDeviceStatus(response: string, getGestures: boolean): 
       targetTemperatureF: calculateTempInF(rawDeviceData.tgHeatLevelL),
       secondsRemaining: leftSideSecondsRemaining,
       isOn: leftSideSecondsRemaining > 0,
+      isActive: getHeatActive('left'),
       isAlarmVibrating: memoryDB.data.left.isAlarmVibrating,
     },
     right: {
@@ -172,6 +174,7 @@ export async function loadDeviceStatus(response: string, getGestures: boolean): 
       targetTemperatureF: calculateTempInF(rawDeviceData.tgHeatLevelR),
       secondsRemaining: rightSideSecondsRemaining,
       isOn: rightSideSecondsRemaining > 0,
+      isActive: getHeatActive('right'),
       isAlarmVibrating: memoryDB.data.right.isAlarmVibrating,
     },
     coverVersion: detectCoverVersion(rawDeviceData.sensorLabel),

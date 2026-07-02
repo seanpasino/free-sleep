@@ -6,6 +6,7 @@ import logger from './logger.js';
 import { connectFranken, disconnectFranken } from './8sleep/frankenServer.js';
 import { FrankenMonitor } from './8sleep/frankenMonitor.js';
 import { ButtonMonitor } from './8sleep/buttonMonitor.js';
+import { seedHeatState } from './8sleep/heatState.js';
 import './jobs/jobScheduler.js';
 
 
@@ -106,6 +107,9 @@ const initFrankenMonitor = () => {
   void frankenMonitor.start();
   logger.info('Frank monitor started!');
 
+  // Seed physical heat state from recent journal history, then let ButtonMonitor's
+  // poll keep it fresh from the same journal stream.
+  seedHeatState();
   buttonMonitor = new ButtonMonitor();
   buttonMonitor.start();
 };

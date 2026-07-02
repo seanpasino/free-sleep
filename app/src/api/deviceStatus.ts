@@ -14,7 +14,10 @@ export const useDeviceStatus = () => useQuery<DeviceStatus>({
     const response = await getDeviceStatus();
     return response.data;
   },
-  refetchInterval: 30_000,
+  // 5s so the UI reflects out-of-band changes (physical buttons, and the
+  // firmware's deferred power actuation / isActive) promptly. Each poll is a
+  // ~20ms local socket read on the Pod, so this is cheap.
+  refetchInterval: 5_000,
 });
 
 

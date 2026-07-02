@@ -12,13 +12,14 @@ import { MAX_TEMP_F, MIN_TEMP_F, getTemperatureColor } from '@lib/temperatureCon
 
 type SliderProps = {
   isOn: boolean;
+  isActive?: boolean | null;
   currentTargetTemp: number;
   currentTemperatureF: number;
   refetch: any;
   displayCelsius: boolean;
 }
 
-export default function Slider({ isOn, currentTargetTemp, refetch, currentTemperatureF, displayCelsius }: SliderProps) {
+export default function Slider({ isOn, isActive, currentTargetTemp, refetch, currentTemperatureF, displayCelsius }: SliderProps) {
   const { deviceStatus, setDeviceStatus } = useControlTempStore();
   const { isUpdating, setIsUpdating, side } = useAppStore();
   const { data: settings } = useSettings();
@@ -101,6 +102,7 @@ export default function Slider({ isOn, currentTargetTemp, refetch, currentTemper
         >
           <TemperatureLabel
             isOn={ isOn }
+            isActive={ isActive }
             sliderTemp={ deviceStatus?.[side]?.targetTemperatureF || 55 }
             sliderColor={ sliderColor }
             currentTargetTemp={ currentTargetTemp }

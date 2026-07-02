@@ -10,6 +10,10 @@ const SideStatusSchema = z.object({
     .max(110, { message: 'Temperature cannot exceed 110°F' }),
   secondsRemaining: z.number(),
   isOn: z.boolean(),
+  // Physically heating/cooling right now (pump + TEC running), from the frank
+  // journal's set_side events. Distinct from isOn, which only means the duration
+  // timer is set — the firmware defers actuation (anti-short-cycle). null = unknown.
+  isActive: z.boolean().nullable(),
   isAlarmVibrating: z.boolean(),
   taps: z.object({
     doubleTap: z.number(),
