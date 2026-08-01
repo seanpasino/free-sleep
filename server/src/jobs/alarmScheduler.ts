@@ -46,7 +46,17 @@ export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPatt
 
     const cborPayload = cbor.encode(alarmPayload);
     const hexPayload = cborPayload.toString('hex');
-    const command = side === 'left' ? 'ALARM_LEFT' : 'ALARM_RIGHT';
+
+    // Partner guard: if the other side is empty (in away mode), vibrate the whole
+    // bed via the solo trigger (both motor banks — the firmware's high-current
+    // "simultaneous motors" mode) for a stronger wake. If someone is on the other
+    // side (not in away mode), only vibrate this side so we don't wake them.
+    const otherSide: Side = side === 'left' ? 'right' : 'left';
+    const otherSideOccupied = !settingsDB.data[otherSide].awayMode;
+    const command = otherSideOccupied
+      ? (side === 'left' ? 'ALARM_LEFT' : 'ALARM_RIGHT')
+      : 'ALARM_SOLO';
+    logger.debug(`Alarm command | side: ${side} | otherSide: ${otherSide} | otherSideAway: ${!otherSideOccupied} | command: ${command}`);
 
     logger.debug(`Executing alarm... ${JSON.stringify(alarmPayload)}`);
     await executeFunction(command, hexPayload);
