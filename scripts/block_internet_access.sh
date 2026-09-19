@@ -53,14 +53,25 @@ iptables -I OUTPUT -p udp --dport 123 -j ACCEPT
 iptables -I INPUT -p udp --sport 123 -j ACCEPT
 
 echo "Updating the timesyncd config"
-# New configuration content
+# NTP servers must be IP literals - outbound DNS is blocked below, so hostnames
+# never resolve and the clock never syncs (Google + Cloudflare anycast)
+NTP_SERVERS="216.239.35.0 216.239.35.4 162.159.200.1 162.159.200.123"
+NTP_FALLBACK="216.239.35.8 216.239.35.12"
 cat > /etc/systemd/timesyncd.conf <<EOF
 [Time]
-NTP=pool.ntp.org 0.pool.ntp.org 1.pool.ntp.org 2.pool.ntp.org 3.pool.ntp.org
-FallbackNTP=time1.google.com time2.google.com time3.google.com time4.google.com
+NTP=$NTP_SERVERS
+FallbackNTP=$NTP_FALLBACK
 RootDistanceMaxSec=5
 PollIntervalMinSec=32
 PollIntervalMaxSec=2048
+EOF
+
+# Drop-ins override timesyncd.conf, and the Pod ships one with hostnames
+mkdir -p /etc/systemd/timesyncd.conf.d
+cat > /etc/systemd/timesyncd.conf.d/local.conf <<EOF
+[Time]
+NTP=$NTP_SERVERS
+FallbackNTP=$NTP_FALLBACK
 EOF
 
 # Restart timesyncd to apply changes
