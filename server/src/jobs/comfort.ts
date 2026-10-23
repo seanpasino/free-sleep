@@ -117,11 +117,17 @@ const recheckSide = async (side: Side, sideState: SideState) => {
 
   const { exactOffsetF, roomF } = await getAmbientOffset();
   const driftF = exactOffsetF - sideState.appliedOffsetF;
-  if (Math.abs(driftF) < RECHECK_DEADBAND_F) return;
+  if (Math.abs(driftF) < RECHECK_DEADBAND_F) {
+    logger.debug(`Comfort: re-check ${side}: room ${roomF}°F wants +${exactOffsetF}, applied +${sideState.appliedOffsetF}, no change`);
+    return;
+  }
 
   const franken = await connectFranken();
   const status = await franken.getDeviceStatus(false);
-  if (!status[side].isOn) return;
+  if (!status[side].isOn) {
+    logger.debug(`Comfort: re-check ${side}: side is off, no change`);
+    return;
+  }
 
   const stepF = Math.sign(driftF);
   const offsetF = sideState.appliedOffsetF + stepF;
