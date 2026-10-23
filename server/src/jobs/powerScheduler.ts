@@ -10,6 +10,7 @@ import serverStatus from '../serverStatus.js';
 import logger from '../logger.js';
 import servicesDB from '../db/services.js';
 import memoryDB from '../db/memoryDB.js';
+import { getAmbientOffset, logComfortEvent } from './comfort.js';
 
 
 
@@ -32,12 +33,18 @@ export const schedulePowerOn = (settingsData: Settings, side: Side, day: DayOfWe
     try {
       logJob('Executing power on job', side, day, dayOfWeekIndex, time);
 
+      const { offsetF, roomF } = await getAmbientOffset();
+      const targetTemperatureF = Math.min(110, power.onTemperature + offsetF);
+      if (offsetF) {
+        logJob(`Room is ${roomF}°F, warming power-on ${power.onTemperature}°F by ${offsetF}°F`, side, day, dayOfWeekIndex, time);
+      }
       await updateDeviceStatus({
         [side]: {
           isOn: true,
-          targetTemperatureF: power.onTemperature
+          targetTemperatureF,
         }
       });
+      logComfortEvent('power_on', { side, scheduledF: power.onTemperature, offsetF, appliedF: targetTemperatureF, roomF });
       serverStatus.status.powerSchedule.status = 'healthy';
       serverStatus.status.powerSchedule.message = '';
     } catch (error: unknown) {
@@ -110,6 +117,7 @@ export const schedulePowerOffAndSleepAnalysis = (settingsData: Settings, side: S
           isOn: false,
         }
       });
+      logComfortEvent('power_off', { side });
       serverStatus.status.powerSchedule.status = 'healthy';
       serverStatus.status.powerSchedule.message = '';
     } catch (error: unknown) {

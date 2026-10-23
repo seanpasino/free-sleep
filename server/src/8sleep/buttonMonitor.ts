@@ -7,6 +7,7 @@ import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js
 import memoryDB from '../db/memoryDB.js';
 import { recordHeatStateLine } from './heatState.js';
 import logger from '../logger.js';
+import { logComfortEvent } from '../jobs/comfort.js';
 
 type Side = 'left' | 'right';
 
@@ -209,6 +210,7 @@ export class ButtonMonitor {
 
         logger.info(`ButtonMonitor: ${side} temp ${currentTemp} -> ${newTemp} (${delta > 0 ? '+' : ''}${delta})`);
         await updateDeviceStatus({ [side]: { targetTemperatureF: newTemp } } as DeepPartial<DeviceStatus>);
+        logComfortEvent('button', { side, fromF: currentTemp, toF: newTemp });
       }
     } catch (err) {
       logger.error(err);

@@ -9,6 +9,7 @@ import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js
 import serverStatus from '../serverStatus.js';
 import settingsDB from '../db/settings.js';
 import logger from '../logger.js';
+import { getAmbientOffset, logComfortEvent } from './comfort.js';
 
 
 const scheduleAdjustment = (timeZone: TimeZone, side: Side, day: DayOfWeek, time: Time, temperature: number) => {
@@ -37,11 +38,17 @@ const scheduleAdjustment = (timeZone: TimeZone, side: Side, day: DayOfWeek, time
         }
       }
 
+      const { offsetF, roomF } = await getAmbientOffset();
+      const targetTemperatureF = Math.min(110, temperature + offsetF);
+      if (offsetF) {
+        logJob(`Room is ${roomF}°F, warming scheduled ${temperature}°F by ${offsetF}°F`, side, day, dayOfWeekIndex, time);
+      }
       await updateDeviceStatus({
         [side]: {
-          targetTemperatureF: temperature,
+          targetTemperatureF,
         }
       });
+      logComfortEvent('schedule', { side, time, scheduledF: temperature, offsetF, appliedF: targetTemperatureF, roomF });
       serverStatus.status.temperatureSchedule.status = 'healthy';
       serverStatus.status.temperatureSchedule.message = '';
     } catch (error: unknown) {
