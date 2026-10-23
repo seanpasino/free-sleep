@@ -19,11 +19,11 @@ const SNAPSHOT_EVERY_MINUTES = 5;
 // Winter heating cycles swing the bedroom ~1°F within the hour, so the room is a 30 min median
 const ROOM_WINDOW_MS = 30 * 60 * 1000;
 const MIN_ROOM_SAMPLES = 5;
-// Between schedule steps, re-check every 15 min (the water settles in 15-20 min) at :07/:22/:37/:52,
-// clear of steps on the hour and half hour. Move 1°F at a time, and only once the wanted offset
-// is 0.75°F from the applied one so the bed doesn't flap at a rounding edge.
+// Between schedule steps, re-check every 15 min (the water settles in 15-20 min) at :00/:15/:30/:45.
+// Move 1°F at a time, and only once the wanted offset is 0.75°F from the applied one so the bed
+// doesn't flap at a rounding edge. A step that just ran (same minute included) is left to settle.
 const RECHECK_EVERY_MINUTES = 15;
-const RECHECK_AT_MINUTE = 7;
+const RECHECK_AT_MINUTE = 0;
 const RECHECK_DEADBAND_F = 0.75;
 const RECHECK_SETTLE_MS = 5 * 60 * 1000;
 const STATE_MAX_AGE_MS = 14 * 60 * 60 * 1000;
@@ -153,9 +153,10 @@ const recheck = async () => {
   }
 };
 
-// Runs a couple of seconds into every minute; realigns each time so no minute is skipped
+// Runs 30s into every minute, after any schedule job due on that minute has finished;
+// realigns each time so no minute is skipped
 const everyMinute = (callback: () => void) => {
-  const delay = () => 60_000 - (Date.now() % 60_000) + 2_000;
+  const delay = () => 60_000 - ((Date.now() + 30_000) % 60_000);
   const tick = () => {
     callback();
     setTimeout(tick, delay());
