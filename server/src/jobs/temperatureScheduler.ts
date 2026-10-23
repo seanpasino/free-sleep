@@ -48,7 +48,7 @@ const scheduleAdjustment = (timeZone: TimeZone, side: Side, day: DayOfWeek, time
           targetTemperatureF,
         }
       });
-      logComfortEvent('schedule', { side, time, scheduledF: temperature, offsetF, appliedF: targetTemperatureF, roomF });
+      logComfortEvent('schedule', { side, step: time, scheduledF: temperature, offsetF, appliedF: targetTemperatureF, roomF });
       serverStatus.status.temperatureSchedule.status = 'healthy';
       serverStatus.status.temperatureSchedule.message = '';
     } catch (error: unknown) {

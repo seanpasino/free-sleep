@@ -36,7 +36,7 @@ export const getAmbientOffset = async (): Promise<AmbientOffset> => {
 };
 
 export const logComfortEvent = (event: string, details: Record<string, unknown> = {}, sensors = latestSensors()) => {
-  const line = JSON.stringify({ time: new Date().toISOString(), event, ...details, sensors });
+  const line = JSON.stringify({ ...details, time: new Date().toISOString(), event, sensors });
   fs.appendFile(COMFORT_LOG, `${line}\n`, (error) => {
     if (error) logger.warn(`Comfort: could not write log: ${error.message}`);
   });
