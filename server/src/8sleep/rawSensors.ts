@@ -5,7 +5,7 @@ import path from 'path';
 import cbor from 'cbor';
 
 const RAW_FOLDER = '/persistent';
-const TAIL_BYTES = 768 * 1024;
+const TAIL_BYTES = 256 * 1024;
 const STALE_SECONDS = 10 * 60;
 const RECORD_MARKER = Buffer.from([0xa2, 0x63, 0x73, 0x65, 0x71]); // map(2), "seq"
 const DATA_KEY = Buffer.from([0x64, 0x64, 0x61, 0x74, 0x61]); // "data"

@@ -18,7 +18,7 @@ import serverStatus from './serverStatus.js';
 import { prisma } from './db/prisma.js';
 import { setupSentryTags } from './setupSentryTags.js';
 import { loadWifiSignalStrength } from './8sleep/wifiSignalStrength.js';
-import { startComfortSnapshots } from './jobs/comfort.js';
+import { startComfortMonitoring } from './jobs/comfort.js';
 
 const port = 3000;
 const app = express();
@@ -113,7 +113,7 @@ const initFrankenMonitor = () => {
   seedHeatState();
   buttonMonitor = new ButtonMonitor();
   buttonMonitor.start();
-  startComfortSnapshots();
+  startComfortMonitoring();
 };
 
 

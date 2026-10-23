@@ -9,7 +9,7 @@ import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js
 import serverStatus from '../serverStatus.js';
 import settingsDB from '../db/settings.js';
 import logger from '../logger.js';
-import { getAmbientOffset, logComfortEvent } from './comfort.js';
+import { getAmbientOffset, logComfortEvent, recordAppliedOffset } from './comfort.js';
 
 
 const scheduleAdjustment = (timeZone: TimeZone, side: Side, day: DayOfWeek, time: Time, temperature: number) => {
@@ -48,6 +48,7 @@ const scheduleAdjustment = (timeZone: TimeZone, side: Side, day: DayOfWeek, time
           targetTemperatureF,
         }
       });
+      recordAppliedOffset(side, offsetF);
       logComfortEvent('schedule', { side, step: time, scheduledF: temperature, offsetF, appliedF: targetTemperatureF, roomF });
       serverStatus.status.temperatureSchedule.status = 'healthy';
       serverStatus.status.temperatureSchedule.message = '';

@@ -10,7 +10,7 @@ import serverStatus from '../serverStatus.js';
 import logger from '../logger.js';
 import servicesDB from '../db/services.js';
 import memoryDB from '../db/memoryDB.js';
-import { getAmbientOffset, logComfortEvent } from './comfort.js';
+import { getAmbientOffset, logComfortEvent, recordAppliedOffset } from './comfort.js';
 
 
 
@@ -44,6 +44,7 @@ export const schedulePowerOn = (settingsData: Settings, side: Side, day: DayOfWe
           targetTemperatureF,
         }
       });
+      recordAppliedOffset(side, offsetF);
       logComfortEvent('power_on', { side, scheduledF: power.onTemperature, offsetF, appliedF: targetTemperatureF, roomF });
       serverStatus.status.powerSchedule.status = 'healthy';
       serverStatus.status.powerSchedule.message = '';
@@ -117,6 +118,7 @@ export const schedulePowerOffAndSleepAnalysis = (settingsData: Settings, side: S
           isOn: false,
         }
       });
+      recordAppliedOffset(side, null);
       logComfortEvent('power_off', { side });
       serverStatus.status.powerSchedule.status = 'healthy';
       serverStatus.status.powerSchedule.message = '';
