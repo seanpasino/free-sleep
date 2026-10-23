@@ -76,6 +76,16 @@ export const getAmbientOffset = async (): Promise<AmbientOffset> => {
   }
 };
 
+export const isWakeStep = async (temperatureF: number): Promise<boolean> => {
+  try {
+    await comfortDB.read();
+    return temperatureF >= comfortDB.data.ambientCompensation.wakeStepMinF;
+  } catch (error) {
+    logger.error(error);
+    return false;
+  }
+};
+
 export const logComfortEvent = (event: string, details: Record<string, unknown> = {}, sensors = latestSensors()) => {
   const line = JSON.stringify({ ...details, time: new Date().toISOString(), event, sensors });
   fs.appendFile(COMFORT_LOG, `${line}\n`, (error) => {

@@ -16,6 +16,8 @@ const POLL_INTERVAL = 1000;
 // presses (within one poll, or spread across adjacent polls) accumulates into a
 // single net temperature change instead of racing on a stale read.
 const DEBOUNCE_MS = 700;
+// Presses this soon after stopping an alarm are part of stopping it, not temperature changes
+const ALARM_DISMISS_GRACE_MS = 30_000;
 const MIN_TEMP_F = 55;
 const MAX_TEMP_F = 110;
 // A middle press held at least this long toggles that side's power on/off.
@@ -33,6 +35,7 @@ export class ButtonMonitor {
   private lastPollTime = '';
   private seen = new Set<string>();
   private pendingDelta: Record<Side, number> = { left: 0, right: 0 };
+  private alarmDismissedAt: Record<Side, number> = { left: 0, right: 0 };
   private flushTimer: NodeJS.Timeout | null = null;
   private flushing = false;
   // Duration from the most recent "middle button held for <N>ms" line, paired
@@ -133,6 +136,14 @@ export class ButtonMonitor {
   // (e.g. up x3 = +3F) instead of each doing a concurrent read-modify-write
   // against the same stale temperature.
   private registerPress(button: 'top' | 'bottom', side: Side) {
+    // A press that stops a vibrating alarm, and any follow-up presses right after, only stop the alarm
+    if (memoryDB.data[side].isAlarmVibrating) this.alarmDismissedAt[side] = Date.now();
+    if (Date.now() - this.alarmDismissedAt[side] < ALARM_DISMISS_GRACE_MS) {
+      logger.debug(`ButtonMonitor: ${button} press on ${side} during/just after alarm — not changing temperature`);
+      void this.dismissAlarmIfVibrating(side);
+      return;
+    }
+
     this.pendingDelta[side] += button === 'top' ? 1 : -1;
     logger.debug(`ButtonMonitor: ${button} press on ${side}, pending delta ${this.pendingDelta[side]}`);
 

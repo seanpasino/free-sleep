@@ -9,7 +9,7 @@ import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js
 import serverStatus from '../serverStatus.js';
 import settingsDB from '../db/settings.js';
 import logger from '../logger.js';
-import { getAmbientOffset, logComfortEvent, recordAppliedOffset } from './comfort.js';
+import { getAmbientOffset, isWakeStep, logComfortEvent, recordAppliedOffset } from './comfort.js';
 
 
 const scheduleAdjustment = (timeZone: TimeZone, side: Side, day: DayOfWeek, time: Time, temperature: number) => {
@@ -38,7 +38,8 @@ const scheduleAdjustment = (timeZone: TimeZone, side: Side, day: DayOfWeek, time
         }
       }
 
-      const { offsetF, roomF } = await getAmbientOffset();
+      const wakeStep = await isWakeStep(temperature);
+      const { offsetF, roomF } = wakeStep ? { offsetF: 0, roomF: null } : await getAmbientOffset();
       const targetTemperatureF = Math.min(110, temperature + offsetF);
       if (offsetF) {
         logJob(`Room is ${roomF}°F, warming scheduled ${temperature}°F by ${offsetF}°F`, side, day, dayOfWeekIndex, time);
@@ -48,8 +49,8 @@ const scheduleAdjustment = (timeZone: TimeZone, side: Side, day: DayOfWeek, time
           targetTemperatureF,
         }
       });
-      recordAppliedOffset(side, offsetF);
-      logComfortEvent('schedule', { side, step: time, scheduledF: temperature, offsetF, appliedF: targetTemperatureF, roomF });
+      recordAppliedOffset(side, wakeStep ? null : offsetF);
+      logComfortEvent('schedule', { side, step: time, wakeStep, scheduledF: temperature, offsetF, appliedF: targetTemperatureF, roomF });
       serverStatus.status.temperatureSchedule.status = 'healthy';
       serverStatus.status.temperatureSchedule.message = '';
     } catch (error: unknown) {

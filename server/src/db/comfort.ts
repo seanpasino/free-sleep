@@ -13,6 +13,8 @@ export type Comfort = {
     // °F of bed warming per °F the room is below baseRoomF
     gain: number;
     maxOffsetF: number;
+    // Steps this warm are the wake-up spike: applied as scheduled, and re-checks stop until the next night
+    wakeStepMinF: number;
   };
 };
 
@@ -22,6 +24,7 @@ const defaultData: Comfort = {
     baseRoomF: 76,
     gain: 0.75,
     maxOffsetF: 10,
+    wakeStepMinF: 85,
   },
 };
 
