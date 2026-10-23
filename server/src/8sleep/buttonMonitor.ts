@@ -17,7 +17,7 @@ const POLL_INTERVAL = 1000;
 // single net temperature change instead of racing on a stale read.
 const DEBOUNCE_MS = 700;
 // Presses this soon after stopping an alarm are part of stopping it, not temperature changes
-const ALARM_DISMISS_GRACE_MS = 30_000;
+const ALARM_DISMISS_GRACE_MS = 5_000;
 const MIN_TEMP_F = 55;
 const MAX_TEMP_F = 110;
 // A middle press held at least this long toggles that side's power on/off.

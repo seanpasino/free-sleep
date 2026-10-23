@@ -22,7 +22,7 @@ const defaultData: Comfort = {
   ambientCompensation: {
     enabled: true,
     baseRoomF: 76,
-    gain: 0.75,
+    gain: 1,
     maxOffsetF: 10,
     wakeStepMinF: 85,
   },
