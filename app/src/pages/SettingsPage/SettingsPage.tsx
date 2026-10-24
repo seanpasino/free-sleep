@@ -29,7 +29,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <PageContainer sx={ { mb: 15, mt: 2 } }>
+    <PageContainer sx={ { mt: 2 } }>
       <ErrorBoundary componentName='Device settings'>
         <DeviceSettingsSection updateSettings={ updateSettings } />
       </ErrorBoundary>

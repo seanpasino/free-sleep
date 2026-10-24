@@ -6,7 +6,7 @@ import { keyframes } from '@mui/system';
 import { postDeviceStatus, useDeviceStatus } from '@api/deviceStatus.ts';
 import { useQueryClient } from '@tanstack/react-query';
 import { DEVICE_STATUS_QUERY_KEY } from './targetTemperature.ts';
-import { COLORS } from '../../theme.ts';
+import { COLORS, SAFE_BOTTOM } from '../../theme.ts';
 import { useSettings } from '@api/settings.ts';
 
 const pulse = keyframes`
@@ -73,7 +73,7 @@ export default function AlarmDismissal() {
           backgroundImage: 'none',
           px: 2.5,
           pt: 2.5,
-          pb: 'calc(20px + env(safe-area-inset-bottom))',
+          pb: `calc(20px + ${SAFE_BOTTOM})`,
         },
       } }
     >

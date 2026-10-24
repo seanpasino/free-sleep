@@ -48,6 +48,9 @@ const App = () => {
             <CssBaseline/>
             <GlobalStyles
               styles={ {
+                ':root': {
+                  '--safe-bottom': 'env(safe-area-inset-bottom, 0px)',
+                },
                 'html, body': {
                   overscrollBehavior: 'none', // Prevent rubber-banding
                   // Stops double-tap zoom on the +/- buttons while still allowing pinch zoom

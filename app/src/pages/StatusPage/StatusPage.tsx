@@ -21,7 +21,6 @@ export default function StatusPage() {
         width: '100%',
         maxWidth: { xs: '100%', sm: '800px' },
         mx: 'auto',
-        mb: 15,
       } }
     >
       <Stack spacing={ 1 } alignItems="center">

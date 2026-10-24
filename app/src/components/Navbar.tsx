@@ -6,7 +6,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppStore } from '@state/appStore.tsx';
 import { useTheme } from '@mui/material/styles';
 import { PAGES } from './pages';
-import { COLORS, NAV_HEIGHT } from '../theme.ts';
+import { COLORS, NAV_HEIGHT, SAFE_BOTTOM } from '../theme.ts';
 
 // '/', '/left' and '/right' all render the temperature page; '/data/sleep' etc. belong to Data
 const getActivePageIndex = (pathname: string) => {
@@ -74,7 +74,7 @@ export default function Navbar() {
           position: 'fixed',
           bottom: 0,
           left: 0,
-          paddingBottom: 'env(safe-area-inset-bottom)',
+          paddingBottom: SAFE_BOTTOM,
           borderTop: `1px solid ${COLORS.raised}`,
           backgroundColor: COLORS.navGround,
           zIndex: 10,

@@ -1,5 +1,5 @@
 import { Box, Button, Typography } from '@mui/material';
-import { COLORS, NAV_HEIGHT } from '../../theme.ts';
+import { COLORS, NAV_HEIGHT, SAFE_BOTTOM } from '../../theme.ts';
 import { useAppStore } from '@state/appStore.tsx';
 import { useScheduleStore } from './scheduleStore.tsx';
 
@@ -22,7 +22,7 @@ export default function UnsavedBar({ onSave }: UnsavedBarProps) {
         position: 'fixed',
         left: 0,
         right: 0,
-        bottom: `calc(${NAV_HEIGHT + 10}px + env(safe-area-inset-bottom))`,
+        bottom: `calc(${NAV_HEIGHT + 10}px + ${SAFE_BOTTOM})`,
         display: 'flex',
         justifyContent: 'center',
         px: 1.5,

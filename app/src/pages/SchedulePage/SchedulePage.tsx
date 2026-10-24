@@ -22,7 +22,7 @@ import SideControl from '../../components/SideControl.tsx';
 import StartTemperature from './StartTemperature.tsx';
 import TimelinePointEditor from './TimelinePointEditor.tsx';
 import UnsavedBar from './UnsavedBar.tsx';
-import { COLORS } from '../../theme.ts';
+import { COLORS, pageBottomClearance } from '../../theme.ts';
 import { DayOfWeek, Schedules } from '@api/schedulesSchema.ts';
 import { formatClock } from '@lib/night.ts';
 import { formatTemperature } from '@lib/temperatureConversions.ts';
@@ -177,7 +177,8 @@ export default function SchedulePage() {
         alignItems: 'stretch',
         justifyContent: 'flex-start',
         gap: 2,
-        pb: changesPresent ? 24 : 14,
+        // Extra room for the unsaved-changes bar that sits above the tab bar
+        pb: pageBottomClearance(changesPresent ? 84 : 0),
       } }
     >
       <Box sx={ { display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: 32, mt: 1 } }>

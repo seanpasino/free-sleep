@@ -28,6 +28,13 @@ const TONES = {
 
 export const NAV_HEIGHT = 64;
 
+// The iPhone home-indicator inset, as one CSS variable (set on :root in main.tsx) so the
+// tab bar, the unsaved-changes bar and the page bottom padding always agree
+export const SAFE_BOTTOM = 'var(--safe-bottom)';
+
+// Room every page leaves at the bottom so its last item clears the fixed tab bar
+export const pageBottomClearance = (extraPx = 0) => `calc(${NAV_HEIGHT + 24 + extraPx}px + ${SAFE_BOTTOM})`;
+
 const FONT = 'Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
 export const theme = createTheme({

@@ -54,7 +54,6 @@ export default function ControlTempPage() {
         alignItems: 'stretch',
         justifyContent: 'flex-start',
         gap: 2.5,
-        pb: 14,
       } }
     >
       <Box sx={ { display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: 32, mt: 1 } }>
