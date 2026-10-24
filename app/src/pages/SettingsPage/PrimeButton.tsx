@@ -1,6 +1,6 @@
 import Button from '@mui/material/Button';
 import { postDeviceStatus } from '@api/deviceStatus.ts';
-import { useAppStore } from '@state/appStore.tsx';
+import { reportError, useAppStore } from '@state/appStore.tsx';
 
 type PrimeButtonProps = {
   refetch: any;
@@ -19,9 +19,8 @@ export default function PrimeButton({ refetch }: PrimeButtonProps) {
         return new Promise((resolve) => setTimeout(resolve, 1_000));
       })
       .then(() => refetch())
-      .catch(error => {
-        console.error(error);
-      });
+      .catch(error => reportError('start priming', error))
+      .finally(() => setIsUpdating(false));
   };
 
   return (

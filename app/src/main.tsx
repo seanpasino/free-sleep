@@ -1,5 +1,10 @@
-import { initSentry } from './sentry.tsx';
-initSentry();
+// Bundled font (the Pod blocks internet, and it avoids a render-blocking Google Fonts request)
+/* eslint-disable no-restricted-imports */
+import '@fontsource/roboto/latin-300.css';
+import '@fontsource/roboto/latin-400.css';
+import '@fontsource/roboto/latin-500.css';
+import '@fontsource/roboto/latin-700.css';
+/* eslint-enable no-restricted-imports */
 import * as Sentry from '@sentry/react';
 
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
@@ -66,6 +71,8 @@ const App = () => {
               styles={ {
                 'html, body': {
                   overscrollBehavior: 'none', // Prevent rubber-banding
+                  // Stops double-tap zoom on the +/- buttons while still allowing pinch zoom
+                  touchAction: 'manipulation',
                 },
               } }
             />

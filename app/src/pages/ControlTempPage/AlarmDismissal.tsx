@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogActions,
@@ -6,16 +6,12 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material';
-import { useAppStore } from '@state/appStore.tsx';
+import { reportError, useAppStore } from '@state/appStore.tsx';
 import AlarmIcon from '@mui/icons-material/Alarm';
 import { keyframes } from '@mui/system';
-import { postDeviceStatus } from '@api/deviceStatus.ts';
-import { useControlTempStore } from './controlTempStore.tsx';
-
-
-type AlarmDismissalProps = {
-  refetch: any;
-}
+import { postDeviceStatus, useDeviceStatus } from '@api/deviceStatus.ts';
+import { useQueryClient } from '@tanstack/react-query';
+import { DEVICE_STATUS_QUERY_KEY } from './targetTemperature.ts';
 
 const pulse = keyframes`
     0% { transform: scale(1) translateX(0); }
@@ -28,40 +24,44 @@ const pulse = keyframes`
 `;
 
 
-export default function AlarmDismissal({ refetch }: AlarmDismissalProps) {
-  const { side, setIsUpdating } = useAppStore();
-  const deviceStatus = useControlTempStore(state => state.deviceStatus);
+export default function AlarmDismissal() {
+  const queryClient = useQueryClient();
+  const { side } = useAppStore();
+  const { data: deviceStatus } = useDeviceStatus();
+  const isAlarmVibrating = deviceStatus?.[side]?.isAlarmVibrating || false;
 
   const [dismissed, setDismissed] = useState(false);
+  const [isDismissing, setIsDismissing] = useState(false);
+
+  // Re-arm once the alarm stops, so the next alarm (e.g. tomorrow) shows again
+  // without needing a page reload
+  useEffect(() => {
+    if (!isAlarmVibrating) setDismissed(false);
+  }, [isAlarmVibrating]);
 
   const theme = useTheme();
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
 
 
   const handleDismiss = () => {
-    setIsUpdating(true);
+    setIsDismissing(true);
     postDeviceStatus({
       [side]: {
         isAlarmVibrating: false,
       }
     })
-      .then(() => {
-        // Wait 1 second before refreshing the device status
-        return new Promise((resolve) => setTimeout(resolve, 1_000));
-      })
-      .then(() => refetch())
-      .catch(error => {
-        console.error(error);
-      })
+      // Only hide the dialog if the Pod accepted it; on failure it stays up to retry
+      .then(() => setDismissed(true))
+      .catch(error => reportError('dismiss the alarm', error))
       .finally(() => {
-        setIsUpdating(false);
-        setDismissed(true);
+        setIsDismissing(false);
+        void queryClient.invalidateQueries({ queryKey: DEVICE_STATUS_QUERY_KEY });
       });
   };
 
   return (
     <Dialog
-      open={ dismissed ? false : deviceStatus?.[side]?.isAlarmVibrating || false }
+      open={ !dismissed && isAlarmVibrating }
       fullScreen={ isSmallScreen }
       PaperProps={ {
         sx: isSmallScreen
@@ -93,6 +93,7 @@ export default function AlarmDismissal({ refetch }: AlarmDismissalProps) {
         <AlarmIcon fontSize="large" sx={ { mb: 4,animation: `${pulse} 2s infinite`, } }/>
         <Button
           onClick={ handleDismiss }
+          disabled={ isDismissing }
           color="error"
           variant="contained"
         >

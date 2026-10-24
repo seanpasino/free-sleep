@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { postDeviceStatus, useDeviceStatus } from '@api/deviceStatus.ts';
 import { DeviceStatus } from '@api/deviceStatusSchema.ts';
 import _ from 'lodash';
-import { useAppStore } from '@state/appStore.tsx';
+import { reportError, useAppStore } from '@state/appStore.tsx';
 import { Box, Slider, Typography } from '@mui/material';
 
 export default function LedBrightnessSlider() {
@@ -21,9 +21,11 @@ export default function LedBrightnessSlider() {
   };
 
   const handleSave = () => {
+    if (settingsCopy?.ledBrightness === undefined) return;
     setIsUpdating(true);
+    // Only send the brightness, not the whole device-settings object
     postDeviceStatus({
-      settings: settingsCopy,
+      settings: { ledBrightness: settingsCopy.ledBrightness },
     })
       .then(() => {
         // Wait 1 second before refreshing the device status
@@ -31,7 +33,9 @@ export default function LedBrightnessSlider() {
       })
       .then(() => refetch())
       .catch(error => {
-        console.error(error);
+        reportError('change the LED brightness', error);
+        // Snap the slider back to what the Pod actually has
+        setSettingsCopy(deviceStatus?.settings);
       })
       .finally(() => {
         setIsUpdating(false);

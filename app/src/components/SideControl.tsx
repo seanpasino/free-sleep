@@ -2,7 +2,7 @@ import {
   ToggleButtonGroup,
   ToggleButton,
 } from '@mui/material';
-import { useAppStore } from '@state/appStore.tsx';
+import { Side, useAppStore } from '@state/appStore.tsx';
 import { useSettings } from '@api/settings.ts';
 import { useDeviceStatus } from '@api/deviceStatus.ts';
 import { formatTemperature } from '@lib/temperatureConversions.ts';
@@ -12,7 +12,7 @@ type SideControlProps = {
 };
 
 export default function SideControl({ showTemp }: SideControlProps) {
-  const { side, setSide } = useAppStore();
+  const { side, setSide, confirmDiscardChanges } = useAppStore();
   const { data: settings } = useSettings();
   const { data: deviceStatus } = useDeviceStatus();
 
@@ -22,9 +22,12 @@ export default function SideControl({ showTemp }: SideControlProps) {
       color="primary"
       exclusive
       value={ side }
-      onChange={ (event) => {
-        // @ts-expect-error
-        setSide(event.target.value);
+      // Use the value MUI passes, not event.target (which can be an inner element);
+      // it is null when the already-selected side is tapped again
+      onChange={ (_event, newSide: Side | null) => {
+        if (!newSide || newSide === side) return;
+        if (!confirmDiscardChanges()) return;
+        setSide(newSide);
       } }
       size="small"
     >

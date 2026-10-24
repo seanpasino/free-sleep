@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import Button from '@mui/material/Button';
-import { Box, CircularProgress } from '@mui/material';
+import { Alert, Box, CircularProgress, Skeleton } from '@mui/material';
 
 import AlarmDismissal from './AlarmDismissal.tsx';
 import AlarmNotification from './AlarmNotification.tsx';
@@ -13,15 +13,14 @@ import SideControl from '../../components/SideControl.tsx';
 import Slider from './Slider.tsx';
 import WaterNotification from './WaterNotification.tsx';
 import { useAppStore } from '@state/appStore.tsx';
-import { useControlTempStore } from './controlTempStore.tsx';
+import { reconcilePendingTargets } from './targetTemperature.ts';
 import { useDeviceStatus } from '@api/deviceStatus';
 import { useSettings } from '@api/settings.ts';
 import { useTheme } from '@mui/material/styles';
 
 
 export default function ControlTempPage() {
-  const { isError, refetch, data: deviceStatus } = useDeviceStatus();
-  const setDeviceStatus = useControlTempStore(state => state.setDeviceStatus);
+  const { isError, refetch, data: deviceStatus, dataUpdatedAt } = useDeviceStatus();
   const { data: settings } = useSettings();
   const { isUpdating, side } = useAppStore();
   const theme = useTheme();
@@ -33,10 +32,12 @@ export default function ControlTempPage() {
     refetch();
   }, [side]);
 
+  // dataUpdatedAt changes on every successful poll, even when the data is identical,
+  // so expired pending targets are still cleared when nothing else changes
   useEffect(() => {
     if (!deviceStatus) return;
-    setDeviceStatus(deviceStatus);
-  }, [deviceStatus]);
+    reconcilePendingTargets(deviceStatus);
+  }, [dataUpdatedAt]);
 
   return (
     <PageContainer
@@ -47,25 +48,34 @@ export default function ControlTempPage() {
         },
       } }
     >
-      <Slider
-        isOn={ isOn }
-        isActive={ sideStatus?.isActive }
-        currentTargetTemp={ sideStatus?.targetTemperatureF || 55 }
-        refetch={ refetch }
-        currentTemperatureF={ sideStatus?.currentTemperatureF || 55 }
-        displayCelsius={ settings?.temperatureFormat === 'celsius' || false }
-      />
+      { isError && deviceStatus && (
+        <Alert severity="warning" sx={ { width: '100%' } }>
+          Can't reach the Pod. Showing the last known status.
+        </Alert>
+      ) }
 
-      { isError ? (
+      { sideStatus ? (
+        <Slider
+          isOn={ isOn }
+          isActive={ sideStatus.isActive }
+          currentTargetTemp={ sideStatus.targetTemperatureF }
+          currentTemperatureF={ sideStatus.currentTemperatureF }
+          displayCelsius={ settings?.temperatureFormat === 'celsius' || false }
+        />
+      ) : (
+        // No data yet: show a placeholder instead of a made-up 55°F
+        <Skeleton variant="circular" sx={ { width: '100%', maxWidth: '400px', height: 'auto', aspectRatio: '1' } }/>
+      ) }
+
+      { isError && !deviceStatus ? (
         <Button
           variant="contained"
           onClick={ () => refetch() }
-          disabled={ isUpdating }
         >
           Try again
         </Button>
-      ) : (
-        <PowerButton isOn={ sideStatus?.isOn || false } refetch={ refetch }/>
+      ) : sideStatus && (
+        <PowerButton isOn={ isOn }/>
       ) }
 
       <Box sx={ { display: 'flex', flexDirection: 'column', gap: 1 } }>
@@ -80,7 +90,7 @@ export default function ControlTempPage() {
         <AwayNotification settings={ settings }/>
         <WaterNotification/>
       </Box>
-      <AlarmDismissal refetch={ refetch }/>
+      <AlarmDismissal/>
       { isUpdating && <CircularProgress/> }
       <SideControl showTemp={ true }/>
     </PageContainer>

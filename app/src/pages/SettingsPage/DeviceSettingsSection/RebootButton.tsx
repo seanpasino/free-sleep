@@ -7,6 +7,7 @@ import { TransitionProps } from '@mui/material/transitions';
 import { useState, forwardRef, type ReactElement, type Ref } from 'react';
 
 import { postJobs } from '@api/jobs.ts';
+import { reportError } from '@state/appStore.tsx';
 
 
 const Transition = forwardRef(function Transition(
@@ -32,9 +33,7 @@ export default function RebootButton() {
 
   const reboot = () => {
     postJobs(['reboot'])
-      .catch(error => {
-        console.error(error);
-      });
+      .catch(error => reportError('reboot the Pod', error));
   };
 
   return (

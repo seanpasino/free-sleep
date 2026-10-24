@@ -5,13 +5,17 @@ import { LOWERCASE_DAYS } from './days.ts';
 
 export default function DayTabs() {
   const { selectDay, selectedDayIndex } = useScheduleStore();
-  const { isUpdating } = useAppStore();
+  const { isUpdating, confirmDiscardChanges } = useAppStore();
 
   return (
     <Paper sx={ { width: '100%' } }>
       <Tabs
         value={ selectedDayIndex || 0 }
-        onChange={ (_, index) => selectDay(index) }
+        onChange={ (_, index) => {
+          if (index === selectedDayIndex) return;
+          if (!confirmDiscardChanges()) return;
+          selectDay(index);
+        } }
         aria-label="Days of the week"
         sx={ {
           width: '100%',

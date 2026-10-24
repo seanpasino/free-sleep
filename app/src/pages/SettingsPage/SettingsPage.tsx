@@ -6,7 +6,7 @@ import SideSettings from './SideSettings.tsx';
 import PageContainer from '../PageContainer.tsx';
 import { Settings } from '@api/settingsSchema.ts';
 import { postSettings, useSettings } from '@api/settings.ts';
-import { useAppStore } from '@state/appStore.tsx';
+import { reportError, useAppStore } from '@state/appStore.tsx';
 import DailyPriming from './DailyPriming.tsx';
 import LicenseModal from './LicenseModal.tsx';
 import PrimeControl from './PrimeControl.tsx';
@@ -28,9 +28,7 @@ export default function SettingsPage() {
 
     postSettings(settings)
       .then(() => refetch())
-      .catch(error => {
-        console.error(error);
-      })
+      .catch(error => reportError('save the settings', error))
       .finally(() => setIsUpdating(false));
   };
 

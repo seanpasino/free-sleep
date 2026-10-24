@@ -12,6 +12,7 @@ import currentServerInfo from '../../../../../server/src/serverInfo.json';
 import { postJobs } from '@api/jobs.ts';
 import { getLatestVersion, useServerInfo } from '@api/serverInfo.ts';
 import { getDeviceStatus } from '@api/deviceStatus.ts';
+import { reportError } from '@state/appStore.tsx';
 
 // Hack for demo app
 if (import.meta.env.VITE_ENV === 'demo') {
@@ -76,7 +77,8 @@ export default function UpdateFreeSleepButton() {
         return waitUntilReady();
       })
       .catch(error => {
-        console.error(error);
+        setIsUpdating(false);
+        reportError('start the update', error);
       });
   };
 

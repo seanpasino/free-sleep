@@ -11,7 +11,7 @@ import {
 } from '@mui/material';
 import moment from 'moment-timezone';
 import { postSettings, useSettings } from '@api/settings.ts';
-import { useAppStore } from '@state/appStore.tsx';
+import { reportError, useAppStore } from '@state/appStore.tsx';
 
 
 export interface AlarmDisabledDialogProps {
@@ -70,9 +70,7 @@ export default function AlarmDisabledDialog({
         setOpen(false);
         return refetch();
       })
-      .catch(error => {
-        console.error(error);
-      })
+      .catch(error => reportError('change the alarm', error))
       .finally(() => {
         setIsSaving(false);
       });

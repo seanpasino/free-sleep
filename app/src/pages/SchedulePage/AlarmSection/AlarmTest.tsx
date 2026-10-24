@@ -1,6 +1,6 @@
 import { Box, Button, CircularProgress, Typography } from '@mui/material';
 import { useScheduleStore } from '../scheduleStore.tsx';
-import { useAppStore } from '@state/appStore.tsx';
+import { reportError, useAppStore } from '@state/appStore.tsx';
 import { postAlarm } from '@api/alarm.ts';
 import { useState } from 'react';
 
@@ -24,9 +24,7 @@ export default function AlarmTest() {
       .then(() => {
         setIsTesting(true);
       })
-      .catch(error => {
-        console.error(error);
-      });
+      .catch(error => reportError('test the alarm', error));
 
     setTimeout(() => setIsTesting(false), TEST_DURATION_SECONDS * 1_000);
   };

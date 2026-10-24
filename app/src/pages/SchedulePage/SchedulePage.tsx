@@ -1,6 +1,6 @@
 import _ from 'lodash';
-import { useEffect } from 'react';
-import { Box } from '@mui/material';
+import { useEffect, useRef } from 'react';
+import { Box, Typography } from '@mui/material';
 import { DeepPartial } from 'ts-essentials';
 import moment from 'moment-timezone';
 
@@ -15,7 +15,7 @@ import PowerScheduleSection from './PowerScheduleSection.tsx';
 import TemperatureAdjustmentsAccordion from './TemperatureAdjustmentsAccordion.tsx';
 import { DayOfWeek, Schedules } from '@api/schedulesSchema.ts';
 import { postSchedules } from '@api/schedules';
-import { useAppStore } from '@state/appStore.tsx';
+import { reportError, useAppStore } from '@state/appStore.tsx';
 import { useSchedules } from '@api/schedules';
 import { useScheduleStore } from './scheduleStore.tsx';
 import { useSettings } from '@api/settings';
@@ -40,7 +40,7 @@ const getAdjustedDayOfWeek = (): DayOfWeek => {
 
 
 export default function SchedulePage() {
-  const { setIsUpdating, side } = useAppStore();
+  const { setIsUpdating, side, notify, setHasUnsavedChanges } = useAppStore();
   const { data: schedules, refetch } = useSchedules();
   const {
     selectedSchedule,
@@ -48,24 +48,47 @@ export default function SchedulePage() {
     selectedDays,
     selectedDay,
     reloadScheduleData,
-    selectDay
+    selectDay,
+    changesPresent,
   } = useScheduleStore();
+  const hasPickedInitialDay = useRef(false);
   const { data: settings } = useSettings();
   const displayCelsius = settings?.temperatureFormat === 'celsius';
-  // TODO: Add changes lost notification using changesPresent when user tries to switch tab before saving
-
   useEffect(() => {
     const day = getAdjustedDayOfWeek();
     selectDay(LOWERCASE_DAYS.indexOf(day));
+    // Leaving the page (already confirmed by the navbar) drops any unsaved edits
+    return () => setHasUnsavedChanges(false);
   }, []);
 
   useEffect(() => {
     if (!schedules) return;
+    const store = useScheduleStore.getState();
+    if (store.changesPresent) {
+      // A background refetch (e.g. returning to the tab) must not wipe the user's
+      // edits: just update the baseline they're compared against
+      useScheduleStore.setState({ originalSchedules: schedules });
+      store.checkForChanges();
+      return;
+    }
     setOriginalSchedules(schedules);
-    const day = getAdjustedDayOfWeek();
-    selectDay(LOWERCASE_DAYS.indexOf(day));
+    // Only jump to "tonight" on first load, not on every refetch
+    if (!hasPickedInitialDay.current) {
+      hasPickedInitialDay.current = true;
+      selectDay(LOWERCASE_DAYS.indexOf(getAdjustedDayOfWeek()));
+    }
     reloadScheduleData();
   }, [schedules]);
+
+  // Warn before a reload / tab close would throw away unsaved edits
+  useEffect(() => {
+    if (!changesPresent) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [changesPresent]);
 
   useEffect(() => {
     reloadScheduleData();
@@ -82,19 +105,23 @@ export default function SchedulePage() {
       payload[side][day] = selectedSchedule;
     });
 
-    await postSchedules(payload)
-      .then(() => {
-        // Wait 1 second before refreshing the schedules
-        return new Promise((resolve) => setTimeout(resolve, 1_000));
-      })
-      .then(() => refetch())
-      .catch(error => {
-        console.error(error);
-      })
-      .finally(() => {
-        setIsUpdating(false);
-      });
+    try {
+      await postSchedules(payload);
+      const { data: savedSchedules } = await refetch();
+      if (savedSchedules) {
+        setOriginalSchedules(savedSchedules);
+        reloadScheduleData();
+      }
+      notify('Schedule saved', 'success');
+    } catch (error) {
+      // Edits are kept so the user can retry
+      reportError('save the schedule', error);
+    } finally {
+      setIsUpdating(false);
+    }
   };
+
+  const isShowingLastNight = moment().hour() < 12 && selectedDay === getAdjustedDayOfWeek();
 
   return (
     <PageContainer
@@ -108,6 +135,11 @@ export default function SchedulePage() {
       <SideControl/>
 
       <DayTabs/>
+      { isShowingLastNight && (
+        <Typography variant="caption" color="text.secondary" sx={ { mt: -1 } }>
+          Before noon this opens on last night's schedule ({ _.capitalize(selectedDay) }).
+        </Typography>
+      ) }
       <ErrorBoundary componentName='Scheduling chart'>
         <TemperatureScheduleChart />
       </ErrorBoundary>

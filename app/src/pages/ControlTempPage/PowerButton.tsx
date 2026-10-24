@@ -3,27 +3,29 @@ import { Button, Box } from '@mui/material';
 import { postDeviceStatus } from '@api/deviceStatus.ts';
 import { DeviceStatus } from '@api/deviceStatusSchema.ts';
 import { DeepPartial } from 'ts-essentials';
-import { useAppStore } from '@state/appStore.tsx';
+import { reportError, useAppStore } from '@state/appStore.tsx';
 import { useSettings } from '@api/settings.ts';
 import { useState } from 'react';
 import { useServices } from '@api/services.ts';
 import { Job, postJobs } from '@api/jobs.ts';
 import AnalyzeSleepNotification from './AnalyzeSleepNotification.tsx';
-import { useControlTempStore } from './controlTempStore.tsx';
+import { useQueryClient } from '@tanstack/react-query';
+import { DEVICE_STATUS_QUERY_KEY } from './targetTemperature.ts';
 
 
 type PowerButtonProps = {
   isOn: boolean;
-  refetch: any;
 }
 
-export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
-  const { isUpdating, setIsUpdating, side } = useAppStore();
+export default function PowerButton({ isOn }: PowerButtonProps) {
+  const queryClient = useQueryClient();
+  const { side } = useAppStore();
   const { data: settings } = useSettings();
   const { data: services } = useServices();
-  const setDeviceStatus = useControlTempStore(state => state.setDeviceStatus);
+  // Busy state is local, so toggling power doesn't lock unrelated controls
+  const [isSwitching, setIsSwitching] = useState(false);
   const isInAwayMode = settings?.[side].awayMode;
-  const disabled = isUpdating || isInAwayMode;
+  const disabled = isSwitching || isInAwayMode;
   const [showAnalyzeSleep, setShowAnalyzeSleep] = useState(false);
   const [showAnalyzeNotification, setShowAnalyzeNotification] = useState(false);
 
@@ -40,20 +42,21 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
       setTimeout(() => setShowAnalyzeSleep(false), 20_000);
     }
 
-    setIsUpdating(true);
-    setDeviceStatus(deviceStatus);
+    setIsSwitching(true);
+    // Optimistic: flip the cached status (as a new object, never mutating the cache)
+    queryClient.setQueryData<DeviceStatus>(DEVICE_STATUS_QUERY_KEY, (current) => current && ({
+      ...current,
+      [side]: { ...current[side], isOn: powerOn },
+    }));
     postDeviceStatus(deviceStatus)
-      .then(() => {
-        // Wait 1 second before refreshing the device status
-        return new Promise((resolve) => setTimeout(resolve, 1_000));
-      })
-      .then(() => refetch())
-      .then((data) => setDeviceStatus(data.data))
       .catch(error => {
-        console.error(error);
+        if (!powerOn) setShowAnalyzeSleep(false);
+        reportError(powerOn ? 'turn the side on' : 'turn the side off', error);
       })
       .finally(() => {
-        setIsUpdating(false);
+        // Either confirms the new state or rolls the optimistic flip back
+        void queryClient.invalidateQueries({ queryKey: DEVICE_STATUS_QUERY_KEY });
+        setIsSwitching(false);
       });
   };
 
@@ -63,7 +66,8 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
     // @ts-expect-error
     postJobs([`analyzeSleep${capitalized}`])
       .catch(error => {
-        console.error(error);
+        setShowAnalyzeNotification(false);
+        reportError('start the sleep analysis', error);
       });
     setTimeout(() => setShowAnalyzeNotification(false), 120_000);
   };
@@ -75,7 +79,7 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
         { isOn ? 'Turn off' : 'Turn on' }
       </Button>
       {
-        showAnalyzeSleep && !isUpdating && services?.biometrics?.enabled && (
+        showAnalyzeSleep && !isSwitching && services?.biometrics?.enabled && (
           <Button
             variant="contained"
             disabled={ disabled }

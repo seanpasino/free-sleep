@@ -1,10 +1,11 @@
 import { CircularSliderWithChildren } from 'react-circular-slider-svg';
-import { postDeviceStatus } from '@api/deviceStatus.ts';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '@state/appStore';
 import styles from './Slider.module.scss';
 import TemperatureLabel from './TemperatureLabel.tsx';
 import TemperatureButtons from './TemperatureButtons.tsx';
 import { useControlTempStore } from './controlTempStore.tsx';
+import { sendPendingTarget } from './targetTemperature.ts';
 import { useTheme } from '@mui/material/styles';
 import { useResizeDetector } from 'react-resize-detector';
 import { useSettings } from '@api/settings.ts';
@@ -15,47 +16,41 @@ type SliderProps = {
   isActive?: boolean | null;
   currentTargetTemp: number;
   currentTemperatureF: number;
-  refetch: any;
   displayCelsius: boolean;
 }
 
-export default function Slider({ isOn, isActive, currentTargetTemp, refetch, currentTemperatureF, displayCelsius }: SliderProps) {
-  const { deviceStatus, setDeviceStatus } = useControlTempStore();
-  const { isUpdating, setIsUpdating, side } = useAppStore();
+export default function Slider({ isOn, isActive, currentTargetTemp, currentTemperatureF, displayCelsius }: SliderProps) {
+  const queryClient = useQueryClient();
+  const { side } = useAppStore();
+  const pendingTemperatureF = useControlTempStore(state => state.pendingTarget[side]?.temperatureF);
+  const setPendingTarget = useControlTempStore(state => state.setPendingTarget);
   const { data: settings } = useSettings();
   const isInAwayMode = settings?.[side].awayMode;
-  const disabled = isUpdating || isInAwayMode || !isOn;
+  // Not disabled while a save is in flight: a newer value simply supersedes the pending one
+  const disabled = isInAwayMode || !isOn;
   const { width, ref } = useResizeDetector();
   const theme = useTheme();
-  const sliderColor = getTemperatureColor(deviceStatus?.[side]?.targetTemperatureF);
-  const handleControlFinished = async () => {
-    if (!deviceStatus) return;
 
-    setIsUpdating(true);
-    void postDeviceStatus({
-      [side]: {
-        targetTemperatureF: deviceStatus[side].targetTemperatureF
-      }
-    })
-      .then(() => {
-        // Wait 1 second before refreshing the device status
-        return new Promise((resolve) => setTimeout(resolve, 1_500));
-      })
-      .then(() => refetch())
-      .catch(error => {
-        console.error(error);
-      })
-      .finally(() => {
-        setIsUpdating(false);
-      });
+  // What the dial shows: the user's not-yet-confirmed pick, else what the Pod reports
+  const targetTemperatureF = pendingTemperatureF ?? currentTargetTemp;
+  const sliderColor = getTemperatureColor(targetTemperatureF);
+
+  const handleControlFinished = () => {
+    if (disabled) return;
+    void sendPendingTarget(queryClient, side);
+  };
+
+  const handleChange = (value: number) => {
+    if (disabled) return;
+    const rounded = Math.round(value);
+    if (rounded !== targetTemperatureF) setPendingTarget(side, rounded);
   };
 
   const arcBackgroundColor = theme.palette.grey[700];
 
-  const sideStatus = deviceStatus?.[side];
-  const minTemp = Math.min(sideStatus?.currentTemperatureF || 55, sideStatus?.targetTemperatureF || 55);
-  const maxTemp = Math.max(sideStatus?.currentTemperatureF || 55, sideStatus?.targetTemperatureF || 55);
-  const isHeating = (sideStatus?.currentTemperatureF ?? 55) < (sideStatus?.targetTemperatureF ?? 55);
+  const minTemp = Math.min(currentTemperatureF, targetTemperatureF);
+  const maxTemp = Math.max(currentTemperatureF, targetTemperatureF);
+  const isHeating = currentTemperatureF < targetTemperatureF;
 
   return (
     <div
@@ -79,31 +74,21 @@ export default function Slider({ isOn, isActive, currentTargetTemp, refetch, cur
           } }
           handle1={ {
             value: minTemp,
-            onChange: (value) => {
-              if (disabled) return;
-              if (Math.round(value) !== deviceStatus?.[side]?.targetTemperatureF) {
-                setDeviceStatus({ [side]: { targetTemperatureF: Math.round(value) } });
-              }
-            },
+            onChange: handleChange,
 
           } }
           arcColor={ isOn ? sliderColor : arcBackgroundColor }
           arcBackgroundColor={ arcBackgroundColor }
           handle2={ {
             value: maxTemp,
-            onChange: (value) => {
-              if (disabled) return;
-              if (Math.round(value) !== deviceStatus?.[side]?.targetTemperatureF) {
-                setDeviceStatus({ [side]: { targetTemperatureF: Math.round(value) } });
-              }
-            },
+            onChange: handleChange,
           } }
           handleSize={ 8 }
         >
           <TemperatureLabel
             isOn={ isOn }
             isActive={ isActive }
-            sliderTemp={ deviceStatus?.[side]?.targetTemperatureF || 55 }
+            sliderTemp={ targetTemperatureF }
             sliderColor={ sliderColor }
             currentTargetTemp={ currentTargetTemp }
             currentTemperatureF={ currentTemperatureF }
@@ -113,7 +98,7 @@ export default function Slider({ isOn, isActive, currentTargetTemp, refetch, cur
       </div>
       {
         isOn && (
-          <TemperatureButtons refetch={ refetch } currentTargetTemp={ currentTargetTemp }/>
+          <TemperatureButtons targetTemperatureF={ targetTemperatureF }/>
         ) }
     </div>
   );

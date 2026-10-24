@@ -13,8 +13,14 @@ import { DeviceStatus } from '@api/deviceStatusSchema';
 import { USER_ID_KEY, HUB_VERSION_KEY, COVER_VERSION_KEY } from '@state/appStore.tsx';
 
 
+let sentryStarted = false;
+
+// Started only once the server reports sentryLogging is enabled (see AppStoreProvider),
+// so nothing is sent before the user's choice is known
 export const initSentry = () => {
+  if (sentryStarted) return;
   if (import.meta.env.VITE_ENV === 'prod') {
+    sentryStarted = true;
     // For some reason, the build assets do not have access to VITE_ENV
     // eslint-disable-next-line no-console
     console.log('Initializing Sentry...');
@@ -61,6 +67,8 @@ export const initSentryTags = (settings: Settings, deviceStatus: DeviceStatus) =
 
 
 export const closeSentry = () => {
+  if (!sentryStarted) return;
+  sentryStarted = false;
   // eslint-disable-next-line no-console
   console.log('Closing Sentry...');
   Sentry.close();

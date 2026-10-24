@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom';
 import Navbar from './Navbar';
+import Notices from './Notices';
 import Box from '@mui/material/Box';
 
 
@@ -21,6 +22,7 @@ export default function Layout() {
       { /* Renders current route */ }
       <Outlet/>
       <Navbar/>
+      <Notices/>
     </Box>
   );
 }

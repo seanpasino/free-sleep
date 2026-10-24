@@ -11,17 +11,25 @@ import { useTheme } from '@mui/material/styles';
 import { PAGES } from './pages';
 import freeSleepIcon from '../../public/free-sleep-icon.svg';
 
+// '/', '/left' and '/right' all render the temperature page; '/data/sleep' etc. belong to Data
+const getActivePageIndex = (pathname: string) => {
+  if (pathname === '/' || pathname === '/left' || pathname === '/right') return 0;
+  const index = PAGES.findIndex(({ route }) => pathname === route || pathname.startsWith(`${route}/`));
+  return index === -1 ? 0 : index;
+};
+
 export default function Navbar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { isUpdating } = useAppStore();
+  const { isUpdating, confirmDiscardChanges } = useAppStore();
   const theme = useTheme(); // Access the Material-UI theme
-  const [mobileNavValue, setMobileNavValue] = React.useState(
-    PAGES.findIndex((page) => page.route === pathname)
-  );
+  // Derived from the URL on every render so it follows back/forward navigation and sub-pages
+  const activeIndex = getActivePageIndex(pathname);
 
   // Handle navigation for both desktop and mobile
   const handleNavigation = (route: string) => {
+    if (pathname === route) return;
+    if (!confirmDiscardChanges()) return;
     navigate(route);
   };
 
@@ -29,7 +37,6 @@ export default function Navbar() {
     _event: React.SyntheticEvent,
     newValue: number
   ) => {
-    setMobileNavValue(newValue);
     handleNavigation(PAGES[newValue].route);
   };
 
@@ -84,7 +91,7 @@ export default function Navbar() {
                 key={ route }
                 onClick={ () => handleNavigation(route) }
                 sx={ { color: 'white' } }
-                variant={ pathname === route ? 'outlined' : 'text' }
+                variant={ PAGES[activeIndex]?.route === route ? 'outlined' : 'text' }
               >
                 { title }
               </Button>
@@ -100,7 +107,8 @@ export default function Navbar() {
           width: '100%',
           position: 'fixed',
           bottom: 0,
-          height: '80px',
+          height: 'calc(80px + env(safe-area-inset-bottom))',
+          paddingBottom: 'env(safe-area-inset-bottom)',
           justifyContent: 'space-between',
           borderTop: `1px solid ${theme.palette.grey[700]}`,
           backgroundColor: theme.palette.background.default,
@@ -108,7 +116,7 @@ export default function Navbar() {
         } }
       >
         <BottomNavigation
-          value={ mobileNavValue }
+          value={ activeIndex }
           onChange={ handleMobileNavChange }
           sx={ {
             width: '100%',

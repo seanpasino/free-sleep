@@ -15,6 +15,7 @@ import Grid from '@mui/material/GridLegacy';
 import StatusChip from './StatusChip.tsx';
 import { postJobs, JobSchema, Jobs } from '@api/jobs.ts';
 import { useState } from 'react';
+import { reportError } from '@state/appStore.tsx';
 
 
 type StatusCardProps = {
@@ -33,7 +34,8 @@ export default function StatusCard({ job, statusInfo }: StatusCardProps) {
     setDisabled(true);
     postJobs([job] as Jobs)
       .catch(error => {
-        console.error(error);
+        setDisabled(false);
+        reportError(`start ${job}`, error);
       });
     setTimeout(() => setDisabled(false), 30_000);
   };

@@ -2,7 +2,7 @@ import InfoIcon from '@mui/icons-material/Info';
 import { Box, CircularProgress, FormControlLabel, Typography, Switch } from '@mui/material';
 import Section from '../Section.tsx';
 import { Services, useServices, postServices } from '@api/services.ts';
-import { useAppStore } from '@state/appStore.tsx';
+import { reportError, useAppStore } from '@state/appStore.tsx';
 import { DeepPartial } from 'ts-essentials';
 
 export default function FeaturesSection() {
@@ -15,9 +15,7 @@ export default function FeaturesSection() {
 
     postServices(services)
       .then(() => refetch())
-      .catch(error => {
-        console.error(error);
-      })
+      .catch(error => reportError('save the feature setting', error))
       .finally(() => setIsUpdating(false));
   };
 

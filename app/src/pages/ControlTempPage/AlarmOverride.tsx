@@ -14,7 +14,7 @@ import {
 import AccessTime from '@mui/icons-material/AccessTime';
 import moment from 'moment-timezone';
 import { postSettings, useSettings } from '@api/settings.ts';
-import { useAppStore } from '@state/appStore.tsx';
+import { reportError, useAppStore } from '@state/appStore.tsx';
 
 export interface AlarmOverrideProps {
   open: boolean;
@@ -76,9 +76,7 @@ export default function AlarmOverride({
         setOverrideOpen(false);
         return refetch();
       })
-      .catch(error => {
-        console.error(error);
-      })
+      .catch(error => reportError('save the alarm override', error))
       .finally(() => {
         setIsSaving(false);
       });

@@ -1,63 +1,46 @@
-import { useRef, useCallback } from 'react';
+import { useRef } from 'react';
 import { useTheme } from '@mui/material/styles';
 import { Button, Box } from '@mui/material';
 import { Add, Remove } from '@mui/icons-material';
+import { useQueryClient } from '@tanstack/react-query';
 import { useControlTempStore } from './controlTempStore.tsx';
-import { useAppStore } from '@state/appStore.tsx';
-import { postDeviceStatus } from '@api/deviceStatus.ts';
+import { sendPendingTarget } from './targetTemperature.ts';
+import { Side, useAppStore } from '@state/appStore.tsx';
 import { useSettings } from '@api/settings.ts';
 import { MIN_TEMP_F, MAX_TEMP_F } from '@lib/temperatureConversions.ts';
 
 type TemperatureButtonsProps = {
-  refetch: any;
-  currentTargetTemp: number;
+  // The target currently shown on the dial (pending pick or the Pod's value)
+  targetTemperatureF: number;
 }
 
 const DEBOUNCE_MS = 2000;
-export default function TemperatureButtons({ refetch, currentTargetTemp }: TemperatureButtonsProps) {
-  const { side, setIsUpdating, isUpdating } = useAppStore();
-  const { deviceStatus, setDeviceStatus } = useControlTempStore();
+export default function TemperatureButtons({ targetTemperatureF }: TemperatureButtonsProps) {
+  const queryClient = useQueryClient();
+  const { side } = useAppStore();
+  const setPendingTarget = useControlTempStore(state => state.setPendingTarget);
   const { data: settings } = useSettings();
   const theme = useTheme();
-  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // One timer per side, so switching sides mid-debounce can't cancel the other side's send.
+  // Not cleared on unmount: a tap made just before leaving the page still gets sent.
+  const debounceTimers = useRef<Partial<Record<Side, ReturnType<typeof setTimeout>>>>({});
 
-  const postUpdate = useCallback(async () => {
-    setIsUpdating(true);
-    try {
-      await postDeviceStatus({
-        [side]: { targetTemperatureF: deviceStatus?.[side]?.targetTemperatureF },
-      });
-      await new Promise(r => setTimeout(r, 1_500));
-      await refetch?.();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsUpdating(false);
-    }
-  }, [deviceStatus, side, refetch, setIsUpdating]);
-
-  const scheduleUpdate = useCallback(() => {
-    if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    debounceTimer.current = setTimeout(postUpdate, DEBOUNCE_MS);
-  }, [postUpdate]);
-
+  const scheduleUpdate = () => {
+    const sideAtClick = side;
+    clearTimeout(debounceTimers.current[sideAtClick]);
+    debounceTimers.current[sideAtClick] = setTimeout(() => void sendPendingTarget(queryClient, sideAtClick), DEBOUNCE_MS);
+  };
 
   const isInAwayMode = settings?.[side].awayMode;
   if (isInAwayMode) return null;
 
-  const disabled = isUpdating || isInAwayMode;
   const borderColor = theme.palette.grey[800];
   const iconColor = theme.palette.grey[500];
 
   const handleClick = (change: number) => {
-    if (!deviceStatus) return;
-    if (deviceStatus === undefined) return;
-    setDeviceStatus({
-      [side]: {
-        targetTemperatureF: deviceStatus[side].targetTemperatureF + change,
-      }
-    });
-
+    const next = Math.min(MAX_TEMP_F, Math.max(MIN_TEMP_F, targetTemperatureF + change));
+    if (next === targetTemperatureF) return;
+    setPendingTarget(side, next);
     scheduleUpdate();
   };
 
@@ -90,7 +73,8 @@ export default function TemperatureButtons({ refetch, currentTargetTemp }: Tempe
         color="primary"
         sx={ buttonStyle }
         onClick={ () => handleClick(-1) }
-        disabled={ disabled || currentTargetTemp <= MIN_TEMP_F }
+        aria-label="Decrease temperature"
+        disabled={ targetTemperatureF <= MIN_TEMP_F }
       >
         <Remove sx={ { color: iconColor } }/>
       </Button>
@@ -99,7 +83,8 @@ export default function TemperatureButtons({ refetch, currentTargetTemp }: Tempe
         sx={ buttonStyle }
 
         onClick={ () => handleClick(1) }
-        disabled={ disabled || currentTargetTemp >= MAX_TEMP_F }
+        aria-label="Increase temperature"
+        disabled={ targetTemperatureF >= MAX_TEMP_F }
       >
         <Add sx={ { color: iconColor } }/>
       </Button>

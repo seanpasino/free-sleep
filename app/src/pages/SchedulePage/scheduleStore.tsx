@@ -74,9 +74,10 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
       selectedDays: { ...DEFAULT_DAYS_SELECTED },
       accordionExpanded: undefined,
       validations: { ...DEFAULT_VALIDATIONS },
-      selectedSchedule,
+      selectedSchedule: _.cloneDeep(selectedSchedule),
       changesPresent: false,
     });
+    useAppStore.getState().setHasUnsavedChanges(false);
   },
 
   selectDay: (newSelectedDayIndex) => {
@@ -99,7 +100,8 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
   },
   setValidations: (newValidations) => {
     const { validations } = get();
-    set({ validations: _.merge(validations, newValidations) });
+    // New object (not an in-place merge) so subscribers re-render
+    set({ validations: _.merge({}, validations, newValidations) });
   },
   isValid: () => {
     const { validations } = get();
@@ -113,6 +115,7 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
     const changesPresent = !_.isEqual(originalSchedules[side][selectedDay], selectedSchedule) || _.some(selectedDays, value => value === true);
 
     set({ changesPresent });
+    useAppStore.getState().setHasUnsavedChanges(changesPresent);
   },
 
   // Updating schedules
