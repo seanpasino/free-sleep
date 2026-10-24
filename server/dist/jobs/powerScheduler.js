@@ -1,5 +1,3 @@
-
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="c47fea5f-3fdb-5d34-b9c3-a971bf6baffc")}catch(e){}}();
 import schedule from 'node-schedule';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
 import { getDayIndexForSchedule, getDayOfWeekIndex, logJob } from './utils.js';
@@ -9,6 +7,7 @@ import serverStatus from '../serverStatus.js';
 import logger from '../logger.js';
 import servicesDB from '../db/services.js';
 import memoryDB from '../db/memoryDB.js';
+import { getAmbientOffset, logComfortEvent, recordAppliedOffset } from './comfort.js';
 export const schedulePowerOn = (settingsData, side, day, power) => {
     if (!power.enabled)
         return;
@@ -28,12 +27,19 @@ export const schedulePowerOn = (settingsData, side, day, power) => {
     schedule.scheduleJob(`${side}-${day}-${time}-power-on`, onRule, async () => {
         try {
             logJob('Executing power on job', side, day, dayOfWeekIndex, time);
+            const { offsetF, roomF } = await getAmbientOffset();
+            const targetTemperatureF = Math.min(110, power.onTemperature + offsetF);
+            if (offsetF) {
+                logJob(`Room is ${roomF}°F, warming power-on ${power.onTemperature}°F by ${offsetF}°F`, side, day, dayOfWeekIndex, time);
+            }
             await updateDeviceStatus({
                 [side]: {
                     isOn: true,
-                    targetTemperatureF: power.onTemperature
+                    targetTemperatureF,
                 }
             });
+            recordAppliedOffset(side, offsetF);
+            logComfortEvent('power_on', { side, scheduledF: power.onTemperature, offsetF, appliedF: targetTemperatureF, roomF });
             serverStatus.status.powerSchedule.status = 'healthy';
             serverStatus.status.powerSchedule.message = '';
         }
@@ -102,6 +108,8 @@ export const schedulePowerOffAndSleepAnalysis = (settingsData, side, day, power)
                     isOn: false,
                 }
             });
+            recordAppliedOffset(side, null);
+            logComfortEvent('power_off', { side });
             serverStatus.status.powerSchedule.status = 'healthy';
             serverStatus.status.powerSchedule.message = '';
         }
@@ -114,4 +122,3 @@ export const schedulePowerOffAndSleepAnalysis = (settingsData, side, day, power)
     });
 };
 //# sourceMappingURL=powerScheduler.js.map
-//# debugId=c47fea5f-3fdb-5d34-b9c3-a971bf6baffc

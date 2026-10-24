@@ -1,5 +1,3 @@
-
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="9b6d15ca-ed31-5efc-9e72-af74268fe3ab")}catch(e){}}();
 import schedule from 'node-schedule';
 import cbor from 'cbor';
 import moment from 'moment-timezone';
@@ -39,7 +37,16 @@ export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPatt
         };
         const cborPayload = cbor.encode(alarmPayload);
         const hexPayload = cborPayload.toString('hex');
-        const command = side === 'left' ? 'ALARM_LEFT' : 'ALARM_RIGHT';
+        // Partner guard: if the other side is empty (in away mode), vibrate the whole
+        // bed via the solo trigger (both motor banks — the firmware's high-current
+        // "simultaneous motors" mode) for a stronger wake. If someone is on the other
+        // side (not in away mode), only vibrate this side so we don't wake them.
+        const otherSide = side === 'left' ? 'right' : 'left';
+        const otherSideOccupied = !settingsDB.data[otherSide].awayMode;
+        const command = otherSideOccupied
+            ? (side === 'left' ? 'ALARM_LEFT' : 'ALARM_RIGHT')
+            : 'ALARM_SOLO';
+        logger.debug(`Alarm command | side: ${side} | otherSide: ${otherSide} | otherSideAway: ${!otherSideOccupied} | command: ${command}`);
         logger.debug(`Executing alarm... ${JSON.stringify(alarmPayload)}`);
         await executeFunction(command, hexPayload);
         await memoryDB.read();
@@ -148,4 +155,3 @@ export const scheduleAlarm = (settingsData, side, day, dailySchedule) => {
     });
 };
 //# sourceMappingURL=alarmScheduler.js.map
-//# debugId=9b6d15ca-ed31-5efc-9e72-af74268fe3ab

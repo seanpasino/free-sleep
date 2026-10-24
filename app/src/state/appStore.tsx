@@ -3,8 +3,6 @@ import { create } from 'zustand';
 import moment from 'moment-timezone';
 
 import { useSettings } from '@api/settings.ts';
-import { useServices } from '@api/services.ts';
-import { closeSentry, initSentry, initSentryTags } from '../sentry.tsx';
 import { useDeviceStatus } from '@api/deviceStatus.ts';
 
 export type Side = 'left' | 'right';
@@ -33,9 +31,8 @@ type AppState = {
 };
 
 const SIDE_KEY = 'side';
-export const USER_ID_KEY = 'user_id';
-export const HUB_VERSION_KEY = 'pod_version';
-export const COVER_VERSION_KEY = 'cover_version';
+// Written by older builds only for error reporting (Sentry, now removed); cleared on load
+const LEGACY_SENTRY_KEYS = ['user_id', 'pod_version', 'cover_version'];
 
 // Create Zustand store
 const readStoredSide = (): Side => {
@@ -86,8 +83,8 @@ export const reportError = (action: string, error: unknown) => {
 // AppStoreProvider to sync Zustand with react-query's isFetching
 export function AppStoreProvider({ children }: React.PropsWithChildren) {
   const { data: settings } = useSettings();
-  const { data: services } = useServices();
-  const { data: deviceStatus } = useDeviceStatus();
+  // Keeps the device-status poll running on every page
+  useDeviceStatus();
 
   useEffect(() => {
     if (!settings) return;
@@ -95,19 +92,12 @@ export function AppStoreProvider({ children }: React.PropsWithChildren) {
   }, [settings]);
 
   useEffect(() => {
-    if (!settings || !deviceStatus || !services) return;
-    localStorage.setItem(USER_ID_KEY, settings.id);
-    localStorage.setItem(HUB_VERSION_KEY, deviceStatus.hubVersion);
-    localStorage.setItem(COVER_VERSION_KEY, deviceStatus.coverVersion);
-
-    // sentryLogging is { enabled: boolean }, so check the flag, not the object
-    if (services.sentryLogging?.enabled) {
-      initSentry();
-      initSentryTags(settings, deviceStatus);
-    } else {
-      closeSentry();
+    try {
+      LEGACY_SENTRY_KEYS.forEach(key => localStorage.removeItem(key));
+    } catch {
+      // Blocked storage: nothing to clear
     }
-  }, [settings, deviceStatus, services]);
+  }, []);
 
   return <>{ children }</>;
 }

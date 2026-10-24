@@ -7,9 +7,6 @@ import config from '../config.js';
 
 
 const defaultData: Services = {
-  sentryLogging: {
-    enabled: false,
-  },
   biometrics: {
     enabled: false,
     jobs: {
@@ -65,7 +62,8 @@ const file = new JSONFile<Services>(`${config.lowDbFolder}servicesDB.json`);
 const servicesDB = new Low<Services>(file, defaultData);
 await servicesDB.read();
 // Allows us to add default values to the services if users have existing servicesDB.json data
-servicesDB.data = _.merge({}, defaultData, servicesDB.data);
+// (sentryLogging is dropped: Sentry was removed from this fork)
+servicesDB.data = _.omit(_.merge({}, defaultData, servicesDB.data), 'sentryLogging') as Services;
 await servicesDB.write();
 
 export default servicesDB;

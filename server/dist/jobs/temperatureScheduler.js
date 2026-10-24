@@ -1,10 +1,11 @@
-
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="a03a9e7f-1f56-5115-ab06-7794734144b4")}catch(e){}}();
 import schedule from 'node-schedule';
+import moment from 'moment-timezone';
 import { getDayIndexForSchedule, logJob } from './utils.js';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
 import serverStatus from '../serverStatus.js';
+import settingsDB from '../db/settings.js';
 import logger from '../logger.js';
+import { getAmbientOffset, isWakeStep, logComfortEvent, recordAppliedOffset } from './comfort.js';
 const scheduleAdjustment = (timeZone, side, day, time, temperature) => {
     const onRule = new schedule.RecurrenceRule();
     const dayOfWeekIndex = getDayIndexForSchedule(day, time);
@@ -17,11 +18,28 @@ const scheduleAdjustment = (timeZone, side, day, time, temperature) => {
     schedule.scheduleJob(`${side}-${day}-${time}-${temperature}-temperature-adjustment`, onRule, async () => {
         try {
             logJob('Executing temperature adjustment job', side, day, dayOfWeekIndex, time);
+            await settingsDB.read();
+            if (settingsDB.data[side].scheduleOverrides.temperatureSchedules.expiresAt) {
+                const expiresAt = moment(settingsDB.data[side].scheduleOverrides.temperatureSchedules.expiresAt);
+                const now = moment();
+                if (expiresAt.isAfter(now)) {
+                    logJob(`Detected temperature schedule override! Skipping temperature adjustment! Override expires at: ${expiresAt.format()}`, side, day, dayOfWeekIndex, time);
+                    return;
+                }
+            }
+            const wakeStep = await isWakeStep(temperature);
+            const { offsetF, roomF } = wakeStep ? { offsetF: 0, roomF: null } : await getAmbientOffset();
+            const targetTemperatureF = Math.min(110, temperature + offsetF);
+            if (offsetF) {
+                logJob(`Room is ${roomF}°F, warming scheduled ${temperature}°F by ${offsetF}°F`, side, day, dayOfWeekIndex, time);
+            }
             await updateDeviceStatus({
                 [side]: {
-                    targetTemperatureF: temperature,
+                    targetTemperatureF,
                 }
             });
+            recordAppliedOffset(side, wakeStep ? null : offsetF);
+            logComfortEvent('schedule', { side, step: time, wakeStep, scheduledF: temperature, offsetF, appliedF: targetTemperatureF, roomF });
             serverStatus.status.temperatureSchedule.status = 'healthy';
             serverStatus.status.temperatureSchedule.message = '';
         }
@@ -44,4 +62,3 @@ export const scheduleTemperatures = (settingsData, side, day, temperatures) => {
     });
 };
 //# sourceMappingURL=temperatureScheduler.js.map
-//# debugId=a03a9e7f-1f56-5115-ab06-7794734144b4

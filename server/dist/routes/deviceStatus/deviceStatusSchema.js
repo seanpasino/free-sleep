@@ -1,6 +1,4 @@
 // WARNING! - Any changes here MUST be the same between app/src/api & server/src/db/
-
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="08f5a91d-e546-56c3-818f-6ad1bf575e36")}catch(e){}}();
 import { z } from 'zod';
 const SideStatusSchema = z.object({
     currentTemperatureLevel: z.number(),
@@ -10,6 +8,10 @@ const SideStatusSchema = z.object({
         .max(110, { message: 'Temperature cannot exceed 110°F' }),
     secondsRemaining: z.number(),
     isOn: z.boolean(),
+    // Physically heating/cooling right now (pump + TEC running), from the frank
+    // journal's set_side events. Distinct from isOn, which only means the duration
+    // timer is set — the firmware defers actuation (anti-short-cycle). null = unknown.
+    isActive: z.boolean().nullable(),
     isAlarmVibrating: z.boolean(),
     taps: z.object({
         doubleTap: z.number(),
@@ -44,4 +46,3 @@ export var Version;
     Version["Pod5"] = "Pod 5";
 })(Version || (Version = {}));
 //# sourceMappingURL=deviceStatusSchema.js.map
-//# debugId=08f5a91d-e546-56c3-818f-6ad1bf575e36

@@ -1,12 +1,10 @@
-import { PropsWithChildren, useState } from 'react';
-import * as Sentry from '@sentry/react';
+import { Component, ErrorInfo as ReactErrorInfo, PropsWithChildren } from 'react';
 import { Alert, Typography } from '@mui/material';
 
 
 type ErrorInfo = {
   error: Error;
   componentStack: string;
-  eventId: string;
 }
 
 type ErrorMessageProps = {
@@ -47,17 +45,28 @@ const ErrorMessage = ({ componentName, errorInfo }: ErrorMessageProps) => {
 
 type ErrorBoundaryProps = PropsWithChildren<Pick<ErrorMessageProps, 'componentName'>>;
 
-// eslint-disable-next-line react/no-multi-comp
-export default function ErrorBoundary({ children, componentName }: ErrorBoundaryProps) {
-  const [errorInfo, setErrorInfo] = useState<ErrorInfo | undefined>();
+type ErrorBoundaryState = {
+  errorInfo?: ErrorInfo;
+};
 
-  return (
-    <Sentry.ErrorBoundary
-      fallback={ <ErrorMessage componentName={ componentName } errorInfo={ errorInfo }/> }
-      // @ts-expect-error
-      onError={ (error, componentStack, eventId) => setErrorInfo({ error, componentStack, eventId }) }
-    >
-      { children }
-    </Sentry.ErrorBoundary>
-  );
+// Shows "<componentName> failed to load" instead of blanking the whole page when a child throws
+// eslint-disable-next-line react/no-multi-comp
+export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  state: ErrorBoundaryState = {};
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { errorInfo: { error, componentStack: '' } };
+  }
+
+  componentDidCatch(error: Error, info: ReactErrorInfo) {
+    console.error(error, info.componentStack);
+    this.setState({ errorInfo: { error, componentStack: info.componentStack || '' } });
+  }
+
+  render() {
+    const { children, componentName } = this.props;
+    const { errorInfo } = this.state;
+    if (errorInfo) return <ErrorMessage componentName={ componentName } errorInfo={ errorInfo }/>;
+    return children;
+  }
 }

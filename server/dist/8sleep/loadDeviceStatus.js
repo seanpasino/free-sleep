@@ -1,5 +1,3 @@
-
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="f1b8cb97-259e-52a1-a5d7-be9d01baf547")}catch(e){}}();
 import { z } from 'zod';
 import { Version } from '../routes/deviceStatus/deviceStatusSchema.js';
 import logger from '../logger.js';
@@ -11,6 +9,7 @@ import _ from 'lodash';
 import serverInfo from '../serverInfo.json' with { type: 'json' };
 import { WIFI_SIGNAL_STRENGTH } from './wifiSignalStrength.js';
 import { GestureSchema } from '../db/settingsSchema.js';
+import { getHeatActive } from './heatState.js';
 const RawDeviceData = z.object({
     tgHeatLevelR: z.string().regex(/^-?\d+$/, { message: 'tgHeatLevelR must be a numeric value in a string' }),
     tgHeatLevelL: z.string().regex(/^-?\d+$/, { message: 'tgHeatLevelL must be a numeric value in a string' }),
@@ -155,6 +154,7 @@ export async function loadDeviceStatus(response, getGestures) {
             targetTemperatureF: calculateTempInF(rawDeviceData.tgHeatLevelL),
             secondsRemaining: leftSideSecondsRemaining,
             isOn: leftSideSecondsRemaining > 0,
+            isActive: getHeatActive('left'),
             isAlarmVibrating: memoryDB.data.left.isAlarmVibrating,
         },
         right: {
@@ -163,6 +163,7 @@ export async function loadDeviceStatus(response, getGestures) {
             targetTemperatureF: calculateTempInF(rawDeviceData.tgHeatLevelR),
             secondsRemaining: rightSideSecondsRemaining,
             isOn: rightSideSecondsRemaining > 0,
+            isActive: getHeatActive('right'),
             isAlarmVibrating: memoryDB.data.right.isAlarmVibrating,
         },
         coverVersion: detectCoverVersion(rawDeviceData.sensorLabel),
@@ -198,4 +199,3 @@ export async function loadDeviceStatus(response, getGestures) {
     return deviceStatus;
 }
 //# sourceMappingURL=loadDeviceStatus.js.map
-//# debugId=f1b8cb97-259e-52a1-a5d7-be9d01baf547

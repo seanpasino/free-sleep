@@ -5,7 +5,6 @@ import '@fontsource/inter/latin-400.css';
 import '@fontsource/inter/latin-500.css';
 import '@fontsource/inter/latin-600.css';
 /* eslint-enable no-restricted-imports */
-import * as Sentry from '@sentry/react';
 
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { createRoot } from 'react-dom/client';
@@ -38,9 +37,6 @@ const queryClient = new QueryClient({
   },
 });
 
-const SentryRoutes = Sentry.withSentryReactRouterV7Routing(Routes);
-
-
 const App = () => {
   return (
 
@@ -60,7 +56,7 @@ const App = () => {
               } }
             />
             <BrowserRouter basename="/">
-              <SentryRoutes>
+              <Routes>
                 <Route path="/" element={ <Layout/> }>
                   <Route index element={ <ControlTempPage/> }/>
                   <Route path="temperature" element={ <ControlTempPage/> }/>
@@ -77,7 +73,7 @@ const App = () => {
                   <Route path="settings" element={ <SettingsPage/> }/>
                   <Route path="schedules" element={ <SchedulePage/> }/>
                 </Route>
-              </SentryRoutes>
+              </Routes>
             </BrowserRouter>
           </AppStoreProvider>
         </LocalizationProvider>

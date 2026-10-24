@@ -1,13 +1,7 @@
-
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="393ca830-5bdf-555c-b1b0-feef86779868")}catch(e){}}();
 import moment from 'moment-timezone';
 import logger from '../logger.js';
-import settingsDB from '../db/settings.js';
 import { connectFranken } from './frankenServer.js';
 import { wait } from './promises.js';
-import { Version } from '../routes/deviceStatus/deviceStatusSchema.js';
-import { GestureSchema } from '../db/settingsSchema.js';
-import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
 import serverStatus from '../serverStatus.js';
 export class FrankenMonitor {
     isRunning;
@@ -35,74 +29,22 @@ export class FrankenMonitor {
         logger.debug('Stopping FrankenMonitor loop');
         this.isRunning = false;
     }
-    async processGesture(side, gesture) {
-        const behavior = settingsDB.data[side].taps[gesture];
-        if (behavior.type === 'temperature') {
-            const currentTemperatureTarget = this.deviceStatus[side].targetTemperatureF;
-            let newTemperatureTargetF;
-            const change = behavior.amount;
-            if (behavior.change === 'increment') {
-                newTemperatureTargetF = currentTemperatureTarget + change;
-            }
-            else {
-                newTemperatureTargetF = currentTemperatureTarget + (-1 * change);
-            }
-            logger.debug(`Processing gesture temperature change for ${side}. ${currentTemperatureTarget} -> ${newTemperatureTargetF}`);
-            return await updateDeviceStatus({ [side]: { targetTemperatureF: newTemperatureTargetF } });
-        }
-        else if (behavior.type) {
-            // TODO: Add alarm handling
-            logger.warn('Skipping gesture...');
-        }
-    }
-    processGesturesForSide(nextDeviceStatus, side) {
-        try {
-            for (const gesture of GestureSchema.options) {
-                if (nextDeviceStatus[side].taps?.[gesture] !== this?.deviceStatus?.[side].taps?.[gesture]) {
-                    this.processGesture(side, gesture);
-                }
-            }
-        }
-        catch (error) {
-            logger.error(error);
-        }
-    }
-    async processGestures(nextDeviceStatus) {
-        if (!this.deviceStatus) {
-            logger.warn('Missing current deviceStatus, exiting...');
-            return;
-        }
-        this.processGesturesForSide(nextDeviceStatus, 'left');
-        this.processGesturesForSide(nextDeviceStatus, 'right');
-    }
+    // Gesture handling is intentionally disabled. Physical button presses register
+    // as firmware gestures, so acting on gestures here double-reacts with
+    // ButtonMonitor — it previously changed temperature and then toggled the side's
+    // power underneath the buttons. ButtonMonitor owns temperature and dismisses a
+    // vibrating alarm on any press, so this loop is now only a connection-health poll.
     async frankenLoop() {
         const franken = await connectFranken();
         this.deviceStatus = await franken.getDeviceStatus(false);
-        let hasGestures = this.deviceStatus.coverVersion !== Version.Pod3;
-        let waitTime = hasGestures ? 2_000 : 60_000;
-        if (hasGestures) {
-            this.deviceStatus = await franken.getDeviceStatus(true);
-            logger.debug(`Gestures supported for ${this.deviceStatus.coverVersion}`);
-        }
-        else {
-            logger.debug(`Gestures not supported for ${this.deviceStatus.coverVersion}`);
-        }
-        // No point in querying device status every 3 seconds for checking the prime status...
         while (this.isRunning) {
             try {
                 while (this.isRunning) {
-                    hasGestures = this.deviceStatus.coverVersion !== Version.Pod3;
-                    waitTime = hasGestures ? 2_000 : 60_000;
-                    await wait(waitTime);
+                    await wait(60_000);
                     if (!this.isRunning)
                         break;
                     const franken = await connectFranken();
-                    const nextDeviceStatus = await franken.getDeviceStatus(hasGestures);
-                    await settingsDB.read();
-                    if (hasGestures) {
-                        this.processGestures(nextDeviceStatus);
-                    }
-                    this.deviceStatus = nextDeviceStatus;
+                    this.deviceStatus = await franken.getDeviceStatus(false);
                     serverStatus.status.frankenMonitor.status = 'healthy';
                     serverStatus.status.frankenMonitor.message = '';
                     serverStatus.status.frankenMonitor.timestamp = moment.tz().format();
@@ -113,11 +55,10 @@ export class FrankenMonitor {
                 serverStatus.status.frankenMonitor.message = String(error);
                 serverStatus.status.frankenMonitor.timestamp = moment.tz().format();
                 logger.error(error instanceof Error ? error.message : String(error), 'franken disconnected');
-                await wait(waitTime);
+                await wait(60_000);
             }
         }
         logger.debug('FrankenMonitor loop exited');
     }
 }
 //# sourceMappingURL=frankenMonitor.js.map
-//# debugId=393ca830-5bdf-555c-b1b0-feef86779868

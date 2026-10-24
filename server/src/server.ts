@@ -1,4 +1,3 @@
-import './instrument.js';
 import express from 'express';
 import schedule from 'node-schedule';
 import { Server } from 'http';
@@ -16,7 +15,6 @@ import setupRoutes from './setup/routes.js';
 import config from './config.js';
 import serverStatus from './serverStatus.js';
 import { prisma } from './db/prisma.js';
-import { setupSentryTags } from './setupSentryTags.js';
 import { loadWifiSignalStrength } from './8sleep/wifiSignalStrength.js';
 import { startComfortMonitoring } from './jobs/comfort.js';
 
@@ -132,7 +130,6 @@ async function startServer() {
   if (!config.remoteDevMode) {
     void initFranken()
       .then(() => {
-        setupSentryTags();
         initFrankenMonitor();
       })
       .catch(error => {

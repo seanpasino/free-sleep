@@ -1,5 +1,3 @@
-
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="06057641-4ecd-5809-98b7-74a1353640a9")}catch(e){}}();
 import path from 'path';
 import chokidar from 'chokidar';
 import moment from 'moment-timezone';
@@ -82,24 +80,34 @@ function waitForValidDateAndSetupJobs() {
         logger.warn(message);
     }
 }
+// Only these files define jobs. lowdb saves through dot-prefixed .tmp files, and the biometrics
+// heartbeat rewrites servicesDB.json every ~20s; neither should cancel and rebuild every job.
+const JOB_DB_FILES = ['schedulesDB.json', 'settingsDB.json'];
+// Jobs are due on whole minutes, and a reload cancels everything for about a second before
+// rescheduling. A reload that straddles hh:mm:00 silently drops whatever was due then, so
+// debounce bursts of writes and stay clear of the minute boundary.
+let reloadTimer;
+function requestJobReload() {
+    clearTimeout(reloadTimer);
+    const seconds = new Date().getSeconds();
+    const delayMs = seconds >= 50 ? (63 - seconds) * 1000 : 1000;
+    reloadTimer = setTimeout(() => {
+        if (serverStatus.status.systemDate.status === 'healthy') {
+            void setupJobs();
+        }
+        else {
+            waitForValidDateAndSetupJobs();
+        }
+    }, delayMs);
+}
 // Monitor the JSON file and refresh jobs on change
 chokidar.watch(config.lowDbFolder).on('change', (changedPath) => {
     const fileName = path.basename(changedPath);
-    if (fileName === 'servicesDB.json') {
-        logger.info(`Skipping restarting jobs for DB change: ${fileName}`);
+    if (!JOB_DB_FILES.includes(fileName))
         return;
-    }
-    else {
-        logger.info(`Detected DB change, reloading... ${fileName}`);
-    }
-    if (serverStatus.status.systemDate.status === 'healthy') {
-        void setupJobs();
-    }
-    else {
-        waitForValidDateAndSetupJobs();
-    }
+    logger.info(`Detected DB change, reloading... ${fileName}`);
+    requestJobReload();
 });
 // Initial job setup
 waitForValidDateAndSetupJobs();
 //# sourceMappingURL=jobScheduler.js.map
-//# debugId=06057641-4ecd-5809-98b7-74a1353640a9

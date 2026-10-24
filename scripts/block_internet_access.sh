@@ -5,36 +5,15 @@ echo "Blocking internet access..."
 # IPv4 Rules
 echo "Configuring IPv4 rules..."
 
-# -----------------------------------------------------------------------------------------------------
-# Allow traffic to Sentry servers for error logging
+# Only the local network, loopback and NTP are allowed; everything else is dropped.
+# Start from empty chains so re-running this (updates, enabling biometrics) never
+# stacks duplicate rules.
+iptables -F INPUT
+iptables -F OUTPUT
 
-# https://docs.sentry.io/security-legal-pii/security/ip-ranges/#event-ingestion
-
-# Check if ALLOW_SENTRY is true
-if [ "$ALLOW_SENTRY" = "false" ]; then
-  echo "ALLOW_SENTRY is not true — skipping Sentry firewall configuration."
-
-else
-  echo -e "\e[33mIP rules were setup to allow error logs to be sent to Sentry servers\e[0m"
-  echo -e "\e[33mSentry error logs will NOT be sent to Sentry unless error logging is explicitly enabled in the UI. (It's off by default)\e[0m"
-  echo -e "\e[33mIf you'd like to block Sentry servers, run: 'ALLOW_SENTRY=false sh scripts/block_internet_access.sh'\e[0m"
-  echo -e "\e[33m\e[0m"
-  # --- US IPs ---
-  iptables -C INPUT  -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || \
-  iptables -I INPUT  -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-  iptables -C OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || \
-  iptables -I OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-
-  iptables -A OUTPUT -d 35.186.247.156 -j ACCEPT
-  iptables -A OUTPUT -d 34.120.195.249 -j ACCEPT
-  iptables -A OUTPUT -d 34.36.122.224  -j ACCEPT
-  iptables -A OUTPUT -d 34.36.87.148 -j ACCEPT
-  iptables -A OUTPUT -d 34.120.62.213 -j ACCEPT
-  iptables -A OUTPUT -d 130.211.36.74 -j ACCEPT
-  echo "Sentry error logging IP rules applied successfully."
-fi
-
-# -----------------------------------------------------------------------------------------------------
+# Replies on connections that were allowed to start
+iptables -A INPUT  -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 
 # Allow LAN traffic Class A (10.0.0.0/8)
 iptables -A INPUT -s 10.0.0.0/8 -j ACCEPT
@@ -90,6 +69,10 @@ iptables -A OUTPUT -j DROP
 iptables-save > /etc/iptables/iptables.rules
 
 echo "Configuring IPv6 rules..."
+# unblock_internet_access.sh only flushes IPv4, so clear these here as well
+ip6tables -F INPUT
+ip6tables -F OUTPUT
+
 # Allow local traffic for IPv6
 ip6tables -A INPUT -s fe80::/10 -j ACCEPT
 ip6tables -A OUTPUT -d fe80::/10 -j ACCEPT

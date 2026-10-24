@@ -358,9 +358,6 @@ The POST endpoints (`/api/deviceStatus`, `/api/settings`, `/api/schedules`) supp
 
 ```json
 {
-  "sentryLogging": {
-    "enabled": true,
-  },
   "biometrics": {
     "enabled": true,
     "jobs": {

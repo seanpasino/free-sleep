@@ -1,14 +1,9 @@
 // LowDB, stores the schedules in /persistent/free-sleep-data/lowdb/schedulesDB.json
-
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="49e660aa-df53-52ae-b16f-ccb96e8c84ad")}catch(e){}}();
 import _ from 'lodash';
 import { Low } from 'lowdb';
 import { JSONFile } from 'lowdb/node';
 import config from '../config.js';
 const defaultData = {
-    sentryLogging: {
-        enabled: false,
-    },
     biometrics: {
         enabled: false,
         jobs: {
@@ -61,8 +56,8 @@ const file = new JSONFile(`${config.lowDbFolder}servicesDB.json`);
 const servicesDB = new Low(file, defaultData);
 await servicesDB.read();
 // Allows us to add default values to the services if users have existing servicesDB.json data
-servicesDB.data = _.merge({}, defaultData, servicesDB.data);
+// (sentryLogging is dropped: Sentry was removed from this fork)
+servicesDB.data = _.omit(_.merge({}, defaultData, servicesDB.data), 'sentryLogging');
 await servicesDB.write();
 export default servicesDB;
 //# sourceMappingURL=services.js.map
-//# debugId=49e660aa-df53-52ae-b16f-ccb96e8c84ad
