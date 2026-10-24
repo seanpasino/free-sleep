@@ -1,15 +1,12 @@
 import React from 'react';
-import AppBar from '@mui/material/AppBar';
 import Box from '@mui/material/Box';
 import BottomNavigation from '@mui/material/BottomNavigation';
 import BottomNavigationAction from '@mui/material/BottomNavigationAction';
-import Toolbar from '@mui/material/Toolbar';
-import Button from '@mui/material/Button';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppStore } from '@state/appStore.tsx';
 import { useTheme } from '@mui/material/styles';
 import { PAGES } from './pages';
-import freeSleepIcon from '../../public/free-sleep-icon.svg';
+import { COLORS, NAV_HEIGHT } from '../theme.ts';
 
 // '/', '/left' and '/right' all render the temperature page; '/data/sleep' etc. belong to Data
 const getActivePageIndex = (pathname: string) => {
@@ -33,7 +30,7 @@ export default function Navbar() {
     navigate(route);
   };
 
-  const handleMobileNavChange = (
+  const handleNavChange = (
     _event: React.SyntheticEvent,
     newValue: number
   ) => {
@@ -66,79 +63,50 @@ export default function Navbar() {
           zIndex: 1201,
         } }
       />
-      { /* Desktop Navigation */ }
-      <AppBar
-        position="fixed"
-        color="transparent"
-        sx={ {
-          display: { xs: 'none', md: 'flex' },
-          borderTop: `1px solid ${theme.palette.grey[700]}`,
-          backgroundColor: theme.palette.background.default,
-          boxShadow: 'none',
-          top: 'auto', // Push it to the bottom
-          bottom: 0, // Stick it to the bottom
-          left: 0,
-          right: 0,
-        } }
-      >
-        <Toolbar>
-          <div style={ { flexGrow: 1 } }>
-            <img src={ freeSleepIcon } alt="Join our Discord" width={ 45 } height={ 45 } />
-          </div>
-          <Box sx={ { display: 'flex', gap: 2 } }>
-            { PAGES.map(({ title, route }) => (
-              <Button
-                key={ route }
-                onClick={ () => handleNavigation(route) }
-                sx={ { color: 'white' } }
-                variant={ PAGES[activeIndex]?.route === route ? 'outlined' : 'text' }
-              >
-                { title }
-              </Button>
-            )) }
-          </Box>
-        </Toolbar>
-      </AppBar>
-
-      { /* Mobile Bottom Navigation */ }
+      { /* One labelled bottom bar on every screen size */ }
       <Box
+        component="nav"
+        aria-label="Main"
         sx={ {
-          display: { xs: 'flex', md: 'none' },
+          display: 'flex',
+          justifyContent: 'center',
           width: '100%',
           position: 'fixed',
           bottom: 0,
-          height: 'calc(80px + env(safe-area-inset-bottom))',
+          left: 0,
           paddingBottom: 'env(safe-area-inset-bottom)',
-          justifyContent: 'space-between',
-          borderTop: `1px solid ${theme.palette.grey[700]}`,
-          backgroundColor: theme.palette.background.default,
+          borderTop: `1px solid ${COLORS.raised}`,
+          backgroundColor: COLORS.navGround,
           zIndex: 10,
         } }
       >
         <BottomNavigation
+          showLabels
           value={ activeIndex }
-          onChange={ handleMobileNavChange }
+          onChange={ handleNavChange }
           sx={ {
             width: '100%',
-            backgroundColor: theme.palette.background.default,
-            '& .Mui-selected': {
-              color: theme.palette.grey[100],
-            },
+            maxWidth: 640,
+            height: NAV_HEIGHT,
+            backgroundColor: 'transparent',
             '& .MuiBottomNavigationAction-root': {
-              color: theme.palette.grey[500],
+              color: COLORS.textTertiary,
+              minWidth: 0,
+              gap: '4px',
+              '& .MuiBottomNavigationAction-label': { fontSize: 11, fontWeight: 500 },
+            },
+            '& .MuiBottomNavigationAction-root.Mui-selected': {
+              color: COLORS.text,
+              '& .MuiSvgIcon-root': { color: theme.palette.primary.main },
+              '& .MuiBottomNavigationAction-label': { fontSize: 11 },
             },
           } }
         >
-          { PAGES.map(({ title, icon }, index) => (
+          { PAGES.map(({ title, icon, route }) => (
             <BottomNavigationAction
-              key={ index }
+              key={ route }
+              label={ title }
               icon={ icon }
-              aria-label={ title }
-              sx={ {
-                '&.Mui-selected': {
-                  color: theme.palette.grey[100],
-                },
-              } }
             />
           )) }
         </BottomNavigation>

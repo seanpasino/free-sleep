@@ -1,93 +1,56 @@
-import { useRef } from 'react';
-import { useTheme } from '@mui/material/styles';
-import { Button, Box } from '@mui/material';
+import { Box, IconButton } from '@mui/material';
 import { Add, Remove } from '@mui/icons-material';
-import { useQueryClient } from '@tanstack/react-query';
-import { useControlTempStore } from './controlTempStore.tsx';
-import { sendPendingTarget } from './targetTemperature.ts';
-import { Side, useAppStore } from '@state/appStore.tsx';
-import { useSettings } from '@api/settings.ts';
+import { COLORS } from '../../theme.ts';
 import { MIN_TEMP_F, MAX_TEMP_F } from '@lib/temperatureConversions.ts';
 
 type TemperatureButtonsProps = {
   // The target currently shown on the dial (pending pick or the Pod's value)
   targetTemperatureF: number;
+  onStep: (delta: number) => void;
 }
 
-const DEBOUNCE_MS = 2000;
-export default function TemperatureButtons({ targetTemperatureF }: TemperatureButtonsProps) {
-  const queryClient = useQueryClient();
-  const { side } = useAppStore();
-  const setPendingTarget = useControlTempStore(state => state.setPendingTarget);
-  const { data: settings } = useSettings();
-  const theme = useTheme();
-  // One timer per side, so switching sides mid-debounce can't cancel the other side's send.
-  // Not cleared on unmount: a tap made just before leaving the page still gets sent.
-  const debounceTimers = useRef<Partial<Record<Side, ReturnType<typeof setTimeout>>>>({});
+const buttonSx = {
+  width: 56,
+  height: 56,
+  pointerEvents: 'auto',
+  color: COLORS.text,
+  backgroundColor: COLORS.surface,
+  border: `1px solid ${COLORS.border}`,
+  '&:hover': { backgroundColor: COLORS.raised },
+  '&.Mui-disabled': { color: '#4A5063', borderColor: COLORS.divider },
+};
 
-  const scheduleUpdate = () => {
-    const sideAtClick = side;
-    clearTimeout(debounceTimers.current[sideAtClick]);
-    debounceTimers.current[sideAtClick] = setTimeout(() => void sendPendingTarget(queryClient, sideAtClick), DEBOUNCE_MS);
-  };
-
-  const isInAwayMode = settings?.[side].awayMode;
-  if (isInAwayMode) return null;
-
-  const borderColor = theme.palette.grey[800];
-  const iconColor = theme.palette.grey[500];
-
-  const handleClick = (change: number) => {
-    const next = Math.min(MAX_TEMP_F, Math.max(MIN_TEMP_F, targetTemperatureF + change));
-    if (next === targetTemperatureF) return;
-    setPendingTarget(side, next);
-    scheduleUpdate();
-  };
-
-  const buttonStyle = {
-    borderWidth: '2px',
-    borderColor,
-    width: 50,
-    height: 50,
-    borderRadius: '50%',
-    minWidth: 0,
-    padding: 0,
-  };
-
+// Sits in the dial's bottom gap
+export default function TemperatureButtons({ targetTemperatureF, onStep }: TemperatureButtonsProps) {
   return (
     <Box
       sx={ {
-        top: '75%',
         position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: '2%',
         display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: '100px',
-        width: '100%',
-        marginLeft: 'auto',
-        marginRight: 'auto',
+        justifyContent: 'space-between',
+        px: '11%',
+        pointerEvents: 'none',
       } }
     >
-      <Button
-        variant="outlined"
-        color="primary"
-        sx={ buttonStyle }
-        onClick={ () => handleClick(-1) }
-        aria-label="Decrease temperature"
+      <IconButton
+        sx={ buttonSx }
+        onClick={ () => onStep(-1) }
         disabled={ targetTemperatureF <= MIN_TEMP_F }
+        aria-label="Decrease temperature"
       >
-        <Remove sx={ { color: iconColor } }/>
-      </Button>
-      <Button
-        variant="outlined"
-        sx={ buttonStyle }
-
-        onClick={ () => handleClick(1) }
-        aria-label="Increase temperature"
+        <Remove/>
+      </IconButton>
+      <IconButton
+        sx={ buttonSx }
+        onClick={ () => onStep(1) }
         disabled={ targetTemperatureF >= MAX_TEMP_F }
+        aria-label="Increase temperature"
       >
-        <Add sx={ { color: iconColor } }/>
-      </Button>
+        <Add/>
+      </IconButton>
     </Box>
   );
 }

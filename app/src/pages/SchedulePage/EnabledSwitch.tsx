@@ -21,9 +21,12 @@ export default function EnabledSwitch() {
             );
           } }
           disabled={ isUpdating }
+          size="small"
         />
       }
       label="Enabled"
+      labelPlacement="start"
+      sx={ { m: 0, gap: 0.5, '& .MuiFormControlLabel-label': { fontSize: 13, color: 'text.secondary' } } }
     />
   );
 }

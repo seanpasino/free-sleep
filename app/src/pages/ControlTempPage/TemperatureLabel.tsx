@@ -1,165 +1,95 @@
-import { Box, Typography } from '@mui/material';
-import { useTheme } from '@mui/material/styles';
-import moment from 'moment-timezone';
+import { Box, CircularProgress, Typography } from '@mui/material';
 
-import { useSchedules } from '@api/schedules.ts';
-import { useSettings } from '@api/settings.ts';
-import { useAppStore } from '@state/appStore.tsx';
-import { formatTemperature } from '@lib/temperatureConversions.ts';
+import { COLORS } from '../../theme.ts';
+import { formatDegrees, formatTemperature } from '@lib/temperatureConversions.ts';
 
 
 type TemperatureLabelProps = {
   isOn: boolean;
   isActive?: boolean | null;
-  sliderTemp: number;
-  sliderColor: string;
+  isInAwayMode: boolean;
+  // What the dial shows: the user's pending pick, else the Pod's target
+  targetTemperatureF: number;
+  // What the Pod currently reports as its target
   currentTargetTemp: number;
   currentTemperatureF: number;
   displayCelsius: boolean;
-}
+  isSending: boolean;
+  powerOnTime?: string;
+};
+
+
+const getTitle = (targetTemperatureF: number, currentTargetTemp: number, currentTemperatureF: number, isActive?: boolean | null) => {
+  // User is mid-change
+  if (targetTemperatureF !== currentTargetTemp) {
+    if (targetTemperatureF < currentTemperatureF) return 'Cool to';
+    if (targetTemperatureF > currentTemperatureF) return 'Warm to';
+    return 'Hold at';
+  }
+  // Commanded on, but the pump/TEC hasn't physically engaged yet (the firmware
+  // defers actuation for a couple minutes — anti-short-cycle protection)
+  if (isActive === false) return 'Starting…';
+  if (currentTemperatureF < currentTargetTemp) return 'Warming to';
+  if (currentTemperatureF > currentTargetTemp) return 'Cooling to';
+  return 'Holding at';
+};
 
 
 export default function TemperatureLabel({
   isOn,
   isActive,
-  sliderTemp,
-  sliderColor,
+  isInAwayMode,
+  targetTemperatureF,
   currentTargetTemp,
   currentTemperatureF,
-  displayCelsius
+  displayCelsius,
+  isSending,
+  powerOnTime,
 }: TemperatureLabelProps) {
-  const theme = useTheme();
-  const { side } = useAppStore();
-  const { data: schedules } = useSchedules();
-  const { data: settings } = useSettings();
-  const isInAwayMode = settings?.[side].awayMode;
-
-  const currentDay = settings?.timeZone && moment.tz(settings?.timeZone).format('dddd').toLowerCase();
-  // @ts-expect-error
-  const power = currentDay ? schedules?.[side]?.[currentDay]?.power : undefined;
-  const formattedTime = moment(power?.on, 'HH:mm').format('h:mm A');
-  const powerOffTime = moment(power?.off, 'HH:mm').format('h:mm A');
-
-  let topTitle: string;
-  // Handle user actively changing temp
-  if (sliderTemp !== currentTargetTemp) {
-    if (sliderTemp < currentTemperatureF) {
-      topTitle = 'Cool to';
-    } else if (sliderTemp > currentTemperatureF) {
-      topTitle = 'Warm to';
-    } else {
-      topTitle = '';
-    }
-  } else if (isActive === false) {
-    // Commanded on, but the pump/TEC hasn't physically engaged yet (the firmware
-    // defers actuation for a couple minutes — anti-short-cycle protection).
-    topTitle = 'Starting…';
-  } else {
-    if (currentTemperatureF < currentTargetTemp) {
-      topTitle = 'Warming to';
-    } else if (currentTemperatureF > currentTargetTemp) {
-      topTitle = 'Cooling to';
-    } else {
-      topTitle = '';
-    }
+  if (!isOn || isInAwayMode) {
+    return (
+      <>
+        <Typography
+          sx={ {
+            fontSize: 'clamp(48px, 16vw, 64px)',
+            fontWeight: 400,
+            letterSpacing: '-0.03em',
+            lineHeight: 1,
+            color: COLORS.textTertiary,
+          } }>
+          { isInAwayMode ? 'Away' : 'Off' }
+        </Typography>
+        { !isInAwayMode && powerOnTime && (
+          <Typography sx={ { fontSize: 14, color: COLORS.textTertiary, mt: 1 } }>
+            Turns on at { powerOnTime }
+          </Typography>
+        ) }
+      </>
+    );
   }
 
   return (
-    <div
-      style={ {
-        position: 'absolute',
-        top: '10%',
-        left: '50%',
-        pointerEvents: 'none',
-        textAlign: 'center',
-        height: '300px',
-        width: '100%',
-      } }
-    >
-      {
-        isOn ? (
-          <Box
-            sx={ {
-              position: 'absolute',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              pointerEvents: 'none',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              textAlign: 'center',
-              width: '100%',
-            } }
-          >
-            <Typography
-              sx={ { textWrap: 'nowrap', textAlign: 'center' } }
-              color={ theme.palette.grey[400] }
-            >
-              { topTitle }
-            </Typography>
-
-            { /* Temperature */ }
-            <Typography
-              sx={ { textWrap: 'nowrap', mb: .5 } }
-              variant="h2"
-              color={ sliderColor }
-            >
-              { formatTemperature(currentTargetTemp !== sliderTemp ? sliderTemp : currentTargetTemp, displayCelsius) }
-            </Typography>
-            { /* Currently at label */ }
-            <Typography
-              sx={ { textWrap: 'nowrap', mb: 1 } }
-              color={ theme.palette.grey[400] }
-            >
-              { `Currently at ${formatTemperature(currentTemperatureF, displayCelsius)}` }
-            </Typography>
-            {
-              power?.enabled && (
-                <Typography
-                  sx={ { textWrap: 'nowrap' } }
-                  color={ theme.palette.grey[500] }
-                >
-                  Turns off at { powerOffTime }
-                </Typography>
-              )
-            }
-          </Box>
-        ) : (
-          <Box
-            sx={ {
-              position: 'absolute',
-              top: '10%',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              pointerEvents: 'none',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              textAlign: 'center',
-              width: '100%',
-            } }
-          >
-            <Typography
-              variant="h3"
-              color={ theme.palette.grey[800] }
-            >
-              Off
-            </Typography>
-            {
-              power?.enabled && !isInAwayMode && (
-                <Typography
-                  sx={ { textWrap: 'nowrap' } }
-                  color={ theme.palette.grey[800] }
-                >
-                  Turns on at { formattedTime }
-                </Typography>
-              )
-            }
-          </Box>
-        )
-      }
-    </div>
+    <>
+      <Typography sx={ { fontSize: 14, fontWeight: 500, color: COLORS.textSecondary } }>
+        { getTitle(targetTemperatureF, currentTargetTemp, currentTemperatureF, isActive) }
+      </Typography>
+      <Typography
+        component="span"
+        sx={ { fontSize: 'clamp(56px, 21vw, 80px)', fontWeight: 300, letterSpacing: '-0.04em', lineHeight: 1.05, color: COLORS.text } }
+      >
+        { formatDegrees(targetTemperatureF, displayCelsius) }
+      </Typography>
+      <Typography sx={ { fontSize: 14, color: COLORS.textSecondary } }>
+        Now { formatTemperature(currentTemperatureF, displayCelsius) }
+      </Typography>
+      <Box sx={ { height: 20, mt: 0.5, display: 'flex', alignItems: 'center', gap: 0.75, color: COLORS.textTertiary, fontSize: 12 } }>
+        { isSending && (
+          <>
+            <CircularProgress size={ 10 } thickness={ 6 } sx={ { color: COLORS.cool } }/>
+            Sending to Pod…
+          </>
+        ) }
+      </Box>
+    </>
   );
 }

@@ -1,10 +1,9 @@
 import React from 'react';
-import BarChartIcon from '@mui/icons-material/BarChart';
-import BedIcon from '@mui/icons-material/Bed';
-import ThermostatIcon from '@mui/icons-material/Thermostat';
-import ScheduleIcon from '@mui/icons-material/Schedule';
-import SettingsIcon from '@mui/icons-material/Settings';
-import BugReportIcon from '@mui/icons-material/BugReport';
+import BarChartOutlined from '@mui/icons-material/BarChartOutlined';
+import CalendarMonthOutlined from '@mui/icons-material/CalendarMonthOutlined';
+import MonitorHeartOutlined from '@mui/icons-material/MonitorHeartOutlined';
+import ThermostatOutlined from '@mui/icons-material/ThermostatOutlined';
+import TuneOutlined from '@mui/icons-material/TuneOutlined';
 
 type Page = {
   title: string;
@@ -12,20 +11,10 @@ type Page = {
   icon: React.ReactElement;
 };
 
-function TemperatureIcon() {
-  return (
-    <span>
-      <BedIcon sx={ { marginRight: '-6px' } }/>
-      <ThermostatIcon />
-    </span>
-  );
-}
-
 export const PAGES: Page[] = [
-  { title: 'Temperature', route: '/temperature', icon: <TemperatureIcon/> },
-  { title: 'Schedules', route: '/schedules', icon: <ScheduleIcon/> },
-
-  { title: 'Data', route: '/data', icon: <BarChartIcon/> },
-  { title: 'Status', route: '/status', icon: <BugReportIcon/> },
-  { title: 'Settings', route: '/settings', icon: <SettingsIcon/> },
+  { title: 'Temperature', route: '/temperature', icon: <ThermostatOutlined/> },
+  { title: 'Schedule', route: '/schedules', icon: <CalendarMonthOutlined/> },
+  { title: 'Data', route: '/data', icon: <BarChartOutlined/> },
+  { title: 'Status', route: '/status', icon: <MonitorHeartOutlined/> },
+  { title: 'Settings', route: '/settings', icon: <TuneOutlined/> },
 ];

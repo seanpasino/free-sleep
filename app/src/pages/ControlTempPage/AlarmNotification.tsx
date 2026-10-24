@@ -1,11 +1,7 @@
 import moment from 'moment-timezone';
-import AlarmIcon from '@mui/icons-material/Alarm';
-import AlarmOffIcon from '@mui/icons-material/AlarmOff';
-import {
-  Alert,
-  Box,
-  Button,
-} from '@mui/material';
+import NotificationsNoneOutlined from '@mui/icons-material/NotificationsNoneOutlined';
+import NotificationsOffOutlined from '@mui/icons-material/NotificationsOffOutlined';
+import Pill from '@components/Pill.tsx';
 
 import { useAppStore } from '@state/appStore.tsx';
 import { useSchedules } from '@api/schedules.ts';
@@ -62,17 +58,7 @@ export default function AlarmNotification() {
   if (!power?.enabled || !alarm?.enabled || !settings) return null;
 
   return (
-    <Alert
-      icon={ alarmDisabled ? <AlarmOffIcon /> : <AlarmIcon/> }
-      severity="warning"
-      sx={ {
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        width: '100%',
-        '& .MuiAlert-message': { flexGrow: 1, width: '100%' }
-      } }
-    >
+    <>
       <AlarmOverride
         open={ overrideOpen }
         setOverrideOpen={ setOverrideOpen }
@@ -86,55 +72,31 @@ export default function AlarmNotification() {
         scheduledAlarmTimeHhMm={ scheduledAlarmTimeHhMm }
         alarmDisabled={ alarmDisabled }
       />
-      <Box display="flex" justifyContent="space-between">
-        {
-          alarmDisabled ?
-            (
-              <Box display='flex' justifyContent='space-between' width='100%' alignItems='center'>
-                <div>
-
-                Alarm is disabled
-                &nbsp;
-                </div>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  color="warning"
-                  onClick={ () => setDisabledOpen(true) }
-                >
-                  Enable
-                </Button>
-              </Box>
-
-            )
-            :
-            (
-              <>
-                <div>
-                  Alarm at &nbsp;
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    color="warning"
-                    onClick={ () => setOverrideOpen(!overrideOpen) }
-                  >
-                    { scheduledAlarmTimeAmPm }
-                  </Button>
-
-                </div>
-                &nbsp;
-                <Button
-                  variant="outlined"
-                  size="small"
-                  color="warning"
-                  onClick={ () => setDisabledOpen(true) }
-                >
-                  Disable
-                </Button>
-              </>
-            )
-        }
-      </Box>
-    </Alert>
+      {
+        alarmDisabled ? (
+          <Pill
+            icon={ <NotificationsOffOutlined/> }
+            onClick={ () => setDisabledOpen(true) }
+            ariaLabel="Alarm skipped tonight. Turn it back on"
+          >
+            Alarm skipped · Undo
+          </Pill>
+        ) : (
+          <>
+            <Pill
+              icon={ <NotificationsNoneOutlined/> }
+              tone="warm"
+              onClick={ () => setOverrideOpen(!overrideOpen) }
+              ariaLabel={ `Alarm at ${scheduledAlarmTimeAmPm}. Change tonight's time` }
+            >
+              Alarm { scheduledAlarmTimeAmPm }
+            </Pill>
+            <Pill onClick={ () => setDisabledOpen(true) } ariaLabel="Skip tonight's alarm">
+              Skip tonight
+            </Pill>
+          </>
+        )
+      }
+    </>
   );
 }

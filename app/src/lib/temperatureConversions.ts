@@ -1,3 +1,8 @@
+import { COLORS } from '../theme.ts';
+
+const COOL = COLORS.cool;
+const WARM = COLORS.warm;
+
 export function farenheitToCelcius(farenheit: number): number {
   const celcius = (farenheit - 32) * 5 / 9;
   return Math.round(celcius * 2) / 2;
@@ -7,6 +12,11 @@ export function formatTemperature(temperature: number, celcius: boolean) {
   return celcius ? `${farenheitToCelcius(temperature)}°C` : `${temperature}°F`;
 }
 
+
+// Degrees without the unit, for the big dial number
+export function formatDegrees(temperature: number, celcius: boolean) {
+  return `${celcius ? farenheitToCelcius(temperature) : temperature}°`;
+}
 
 export const MIN_TEMP_F = 55;
 export const MAX_TEMP_F = 110;
@@ -23,3 +33,10 @@ export function getTemperatureColor(tempF: number | undefined) {
   return '#d32f2f';
 }
 
+
+// Blue when cooling (or holding a cool target), orange when warming
+export function getDialColor(targetF: number, currentF: number) {
+  if (targetF < currentF) return COOL;
+  if (targetF > currentF) return WARM;
+  return targetF < 82 ? COOL : WARM;
+}

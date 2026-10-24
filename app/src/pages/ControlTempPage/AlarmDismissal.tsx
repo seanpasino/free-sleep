@@ -1,17 +1,13 @@
 import { useEffect, useState } from 'react';
-import {
-  Dialog,
-  DialogActions,
-  Button,
-  useMediaQuery,
-  useTheme,
-} from '@mui/material';
+import { Box, Button, Drawer, Typography } from '@mui/material';
 import { reportError, useAppStore } from '@state/appStore.tsx';
-import AlarmIcon from '@mui/icons-material/Alarm';
+import NotificationsActiveOutlined from '@mui/icons-material/NotificationsActiveOutlined';
 import { keyframes } from '@mui/system';
 import { postDeviceStatus, useDeviceStatus } from '@api/deviceStatus.ts';
 import { useQueryClient } from '@tanstack/react-query';
 import { DEVICE_STATUS_QUERY_KEY } from './targetTemperature.ts';
+import { COLORS } from '../../theme.ts';
+import { useSettings } from '@api/settings.ts';
 
 const pulse = keyframes`
     0% { transform: scale(1) translateX(0); }
@@ -39,8 +35,7 @@ export default function AlarmDismissal() {
     if (!isAlarmVibrating) setDismissed(false);
   }, [isAlarmVibrating]);
 
-  const theme = useTheme();
-  const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
+  const { data: settings } = useSettings();
 
 
   const handleDismiss = () => {
@@ -59,47 +54,57 @@ export default function AlarmDismissal() {
       });
   };
 
+  const name = settings?.[side]?.name || (side === 'left' ? 'Left' : 'Right');
+
   return (
-    <Dialog
+    <Drawer
+      anchor="bottom"
       open={ !dismissed && isAlarmVibrating }
-      fullScreen={ isSmallScreen }
+      // Only the button dismisses: a stray tap on the backdrop shouldn't silence an alarm
+      onClose={ () => undefined }
       PaperProps={ {
-        sx: isSmallScreen
-          ? {
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            textAlign: 'center',
-            maxWidth: '85vw',
-            maxHeight: '35vh',
-            borderRadius: '10px',
-            margin: 0,
-          }
-          : {
-            width: '50%',
-            height: '200px'
-          },
+        sx: {
+          maxWidth: 560,
+          mx: 'auto',
+          borderRadius: '20px 20px 0 0',
+          border: `1px solid ${COLORS.border}`,
+          borderBottom: 'none',
+          backgroundColor: COLORS.raised,
+          backgroundImage: 'none',
+          px: 2.5,
+          pt: 2.5,
+          pb: 'calc(20px + env(safe-area-inset-bottom))',
+        },
       } }
     >
-      <DialogActions
-        sx={ {
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100%',
-        } }
-      >
-        <AlarmIcon fontSize="large" sx={ { mb: 4,animation: `${pulse} 2s infinite`, } }/>
+      <Box role="alertdialog" aria-label={ `${name} side alarm` } sx={ { display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' } }>
+        <Box
+          sx={ {
+            width: 52,
+            height: 52,
+            borderRadius: '50%',
+            backgroundColor: '#2E2116',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          } }>
+          <NotificationsActiveOutlined sx={ { color: COLORS.warm, fontSize: 26, animation: `${pulse} 2s infinite` } }/>
+        </Box>
+        <Box sx={ { flexGrow: 1, minWidth: 140 } }>
+          <Typography sx={ { fontSize: 17, fontWeight: 600 } }>{ name } side alarm</Typography>
+          <Typography sx={ { fontSize: 14, color: COLORS.textSecondary } }>Vibrating now</Typography>
+        </Box>
         <Button
           onClick={ handleDismiss }
           disabled={ isDismissing }
-          color="error"
+          color="secondary"
           variant="contained"
+          sx={ { px: 3.5, height: 52, borderRadius: '14px' } }
         >
-          Dismiss Alarm
+          Dismiss
         </Button>
-      </DialogActions>
-    </Dialog>
+      </Box>
+    </Drawer>
   );
 }

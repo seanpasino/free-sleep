@@ -1,3 +1,4 @@
+import PowerSettingsNew from '@mui/icons-material/PowerSettingsNew';
 import SearchIcon from '@mui/icons-material/Search';
 import { Button, Box } from '@mui/material';
 import { postDeviceStatus } from '@api/deviceStatus.ts';
@@ -73,10 +74,21 @@ export default function PowerButton({ isOn }: PowerButtonProps) {
   };
   if (isInAwayMode) return null;
 
+  const name = settings?.[side]?.name || side;
+  // Default names read as "Turn off right side"; custom names as "Turn off Sean"
+  const sideLabel = ['left', 'right'].includes(name.toLowerCase()) ? `${name.toLowerCase()} side` : name;
+
   return (
-    <Box sx={ { mt: -6, display: 'flex', flexDirection: 'column', gap: 2 } }>
-      <Button variant="outlined" disabled={ disabled } onClick={ () => handleOnClick(!isOn) }>
-        { isOn ? 'Turn off' : 'Turn on' }
+    <Box sx={ { display: 'flex', flexDirection: 'column', gap: 1.5, width: '100%' } }>
+      <Button
+        variant="outlined"
+        disabled={ disabled }
+        onClick={ () => handleOnClick(!isOn) }
+        startIcon={ <PowerSettingsNew/> }
+        sx={ { height: 52, borderRadius: '14px', fontWeight: 500 } }
+        fullWidth
+      >
+        { isOn ? `Turn off ${sideLabel}` : `Turn on ${sideLabel}` }
       </Button>
       {
         showAnalyzeSleep && !isSwitching && services?.biometrics?.enabled && (
@@ -84,8 +96,9 @@ export default function PowerButton({ isOn }: PowerButtonProps) {
             variant="contained"
             disabled={ disabled }
             onClick={ handleAnalyzeSleep }
+            startIcon={ <SearchIcon /> }
+            fullWidth
           >
-            <SearchIcon />
             Analyze sleep
           </Button>
         )

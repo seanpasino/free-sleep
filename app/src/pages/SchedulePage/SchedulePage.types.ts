@@ -7,5 +7,6 @@ export type DaysSelected = Record<
 
 
 
-export type AccordionExpanded = undefined | 'applyToDays' | 'temperatureAdjustments' | 'alarm';
+// Which schedule row is expanded
+export type AccordionExpanded = undefined | 'power' | 'startTemp' | 'alarm' | 'applyToDays';
 
