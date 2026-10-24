@@ -5,7 +5,8 @@ echo "Blocking internet access..."
 # IPv4 Rules
 echo "Configuring IPv4 rules..."
 
-# Only the local network, loopback and NTP are allowed; everything else is dropped.
+# Only the local network and loopback are allowed; everything else is dropped.
+# Time comes from an NTP server on the LAN (the NUC), so no internet NTP either.
 # Start from empty chains so re-running this (updates, enabling biometrics) never
 # stacks duplicate rules.
 iptables -F INPUT
@@ -27,15 +28,12 @@ iptables -A OUTPUT -d 172.16.0.0/12 -j ACCEPT
 iptables -A INPUT -s 192.168.0.0/16 -j ACCEPT
 iptables -A OUTPUT -d 192.168.0.0/16 -j ACCEPT
 
-# Allow NTP traffic - this allows us to synchronize the system time
-iptables -I OUTPUT -p udp --dport 123 -j ACCEPT
-iptables -I INPUT -p udp --sport 123 -j ACCEPT
-
 echo "Updating the timesyncd config"
-# NTP servers must be IP literals - outbound DNS is blocked below, so hostnames
-# never resolve and the clock never syncs (Google + Cloudflare anycast)
-NTP_SERVERS="216.239.35.0 216.239.35.4 162.159.200.1 162.159.200.123"
-NTP_FALLBACK="216.239.35.8 216.239.35.12"
+# The Pod has no RTC, so it must sync after every boot. It uses the LAN NTP server
+# on the NUC (chrony on the Proxmox host); the LAN rules above cover that traffic.
+# Must be an IP literal: DNS is blocked. Override with NTP_SERVERS=... if needed.
+NTP_SERVERS="${NTP_SERVERS:-192.168.1.75}"
+NTP_FALLBACK="${NTP_FALLBACK:-$NTP_SERVERS}"
 cat > /etc/systemd/timesyncd.conf <<EOF
 [Time]
 NTP=$NTP_SERVERS
@@ -78,10 +76,6 @@ ip6tables -A INPUT -s fe80::/10 -j ACCEPT
 ip6tables -A OUTPUT -d fe80::/10 -j ACCEPT
 ip6tables -A INPUT -s fd00::/8 -j ACCEPT
 ip6tables -A OUTPUT -d fd00::/8 -j ACCEPT
-
-# Allow NTP traffic (IPv6)
-ip6tables -I OUTPUT -p udp --dport 123 -j ACCEPT
-ip6tables -I INPUT -p udp --sport 123 -j ACCEPT
 
 # Block everything else (IPv6)
 ip6tables -A INPUT -j DROP
