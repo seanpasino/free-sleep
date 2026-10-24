@@ -100,7 +100,8 @@ export function AppStoreProvider({ children }: React.PropsWithChildren) {
     localStorage.setItem(HUB_VERSION_KEY, deviceStatus.hubVersion);
     localStorage.setItem(COVER_VERSION_KEY, deviceStatus.coverVersion);
 
-    if (services.sentryLogging) {
+    // sentryLogging is { enabled: boolean }, so check the flag, not the object
+    if (services.sentryLogging?.enabled) {
       initSentry();
       initSentryTags(settings, deviceStatus);
     } else {

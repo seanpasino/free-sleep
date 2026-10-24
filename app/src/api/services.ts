@@ -19,9 +19,10 @@ export const useServices = () => {
 };
 
 export const postServices = (services: DeepPartial<Services>) => {
+  // Only react to the Sentry toggle itself; other feature toggles leave it alone
   if (services?.sentryLogging?.enabled === false) {
     closeSentry();
-  } else {
+  } else if (services?.sentryLogging?.enabled === true) {
     initSentry();
   }
   return axios.post('/services', services);
