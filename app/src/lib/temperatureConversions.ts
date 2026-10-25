@@ -18,8 +18,9 @@ export function formatDegrees(temperature: number, celcius: boolean) {
   return `${celcius ? farenheitToCelcius(temperature) : temperature}°`;
 }
 
-export const MIN_TEMP_F = 55;
-export const MAX_TEMP_F = 110;
+// The range the Pod can actually reach (server/src/8sleep/temperatureLevels.ts)
+export const MIN_TEMP_F = 59;
+export const MAX_TEMP_F = 108;
 
 export const MIN_TEMP_C = farenheitToCelcius(MIN_TEMP_F);
 export const MAX_TEMP_C = farenheitToCelcius(MAX_TEMP_F);
