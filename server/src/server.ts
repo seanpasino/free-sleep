@@ -6,6 +6,7 @@ import { connectFranken, disconnectFranken } from './8sleep/frankenServer.js';
 import { FrankenMonitor } from './8sleep/frankenMonitor.js';
 import { ButtonMonitor } from './8sleep/buttonMonitor.js';
 import { seedHeatState } from './8sleep/heatState.js';
+import { wait } from './8sleep/promises.js';
 import './jobs/jobScheduler.js';
 
 
@@ -95,7 +96,29 @@ async function initFranken() {
   await connectFranken();
 
   serverStatus.status.franken.status = 'healthy';
+  serverStatus.status.franken.message = '';
   logger.info('Franken has been initialized successfully.');
+}
+
+// connectFranken gives up after 10 attempts (~4 min). Keep retrying so the monitors, buttons
+// and comfort jobs still start once the firmware connects, instead of staying off until a restart.
+const FRANKEN_INIT_RETRY_MS = 60_000;
+
+async function initFrankenUntilConnected() {
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    try {
+      await initFranken();
+      return;
+    } catch (error) {
+      serverStatus.status.franken.status = 'failed';
+      const message = error instanceof Error ? error.message : String(error);
+      serverStatus.status.franken.message = message;
+      logger.error(error);
+      logger.warn(`Retrying Franken initialization in ${FRANKEN_INIT_RETRY_MS / 1_000}s`);
+      await wait(FRANKEN_INIT_RETRY_MS);
+    }
+  }
 }
 
 
@@ -128,15 +151,11 @@ async function startServer() {
 
   // Initialize Franken once before listening
   if (!config.remoteDevMode) {
-    void initFranken()
+    void initFrankenUntilConnected()
       .then(() => {
         initFrankenMonitor();
       })
       .catch(error => {
-        serverStatus.status.franken.status = 'failed';
-        const message = error instanceof Error ? error.message : String(error);
-        serverStatus.status.franken.message = message;
-
         logger.error(error);
       });
   }

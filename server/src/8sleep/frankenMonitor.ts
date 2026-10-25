@@ -41,19 +41,18 @@ export class FrankenMonitor {
   // ButtonMonitor — it previously changed temperature and then toggled the side's
   // power underneath the buttons. ButtonMonitor owns temperature and dismisses a
   // vibrating alarm on any press, so this loop is now only a connection-health poll.
+  // The first poll is inside the try too: a command timeout now throws instead of hanging,
+  // and outside the try it would end the loop for good.
   private async frankenLoop() {
-    const franken = await connectFranken();
-    this.deviceStatus = await franken.getDeviceStatus(false);
     while (this.isRunning) {
       try {
         while (this.isRunning) {
-          await wait(60_000);
-          if (!this.isRunning) break;
           const franken = await connectFranken();
           this.deviceStatus = await franken.getDeviceStatus(false);
           serverStatus.status.frankenMonitor.status = 'healthy';
           serverStatus.status.frankenMonitor.message = '';
           serverStatus.status.frankenMonitor.timestamp = moment.tz().format();
+          await wait(60_000);
         }
       } catch (error) {
         serverStatus.status.frankenMonitor.status = 'failed';
