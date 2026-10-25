@@ -36,6 +36,8 @@ const presenceData: PresenceDataState = {
   },
 };
 
+export const isPresent = (side: 'left' | 'right') => presenceData[side].present;
+
 /**
  * POST /presence
  * Update presence data for one or both sides

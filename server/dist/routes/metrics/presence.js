@@ -24,6 +24,7 @@ const presenceData = {
         lastUpdatedAt: moment.tz(settingsDB.data.timeZone).format(),
     },
 };
+export const isPresent = (side) => presenceData[side].present;
 /**
  * POST /presence
  * Update presence data for one or both sides

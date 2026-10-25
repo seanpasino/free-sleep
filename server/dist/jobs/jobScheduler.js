@@ -12,6 +12,7 @@ import { scheduleAlarm, scheduleAlarmOverride } from './alarmScheduler.js';
 import { schedulePowerOffAndSleepAnalysis, schedulePowerOn } from './powerScheduler.js';
 import { schedulePrimingRebootAndCalibration } from './primeScheduler.js';
 import { scheduleTemperatures } from './temperatureScheduler.js';
+import { resumePendingSleepAnalysis } from './sleepAnalysisWait.js';
 async function setupJobs() {
     try {
         if (serverStatus.status.jobs.status === 'started') {
@@ -65,6 +66,7 @@ function waitForValidDateAndSetupJobs() {
         serverStatus.status.systemDate.message = '';
         logger.info('System date is valid. Setting up jobs...');
         void setupJobs();
+        resumePendingSleepAnalysis();
     }
     else if (RETRY_COUNT < 20) {
         serverStatus.status.systemDate.status = 'retrying';

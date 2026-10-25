@@ -199,6 +199,13 @@ def build_sleep_records(merged_df: pd.DataFrame, side: Side, max_gap_in_minutes:
     return sleep_records
 
 
+# A gap up to this long within the analysis window is a bed exit, not the end of the night. At 15
+# min, getting up for half an hour at 3 am split the night, and the part before it (under the
+# 3-hour minimum) was dropped. The analysis only runs once the side has been empty for 15 min
+# after the scheduled power-off, so this doesn't delay it.
+MAX_BED_EXIT_MINUTES = 120
+
+
 def detect_sleep(side: Side, start_time: datetime, end_time: datetime, folder_path: str) -> pd.DataFrame:
     expected_row_count = int((end_time - start_time).total_seconds())
     logger.info(f"Detecting sleep interval for {side} side | {start_time.isoformat()} -> {end_time.isoformat()} | Expected row count: {expected_row_count:,}")
@@ -244,7 +251,7 @@ def detect_sleep(side: Side, start_time: datetime, end_time: datetime, folder_pa
     )
 
     merged_df[f'final_{side}_occupied'] = merged_df[f'piezo_{side}1_presence'] + merged_df[f'cap_{side}_occupied']
-    sleep_records = build_sleep_records(merged_df, side, max_gap_in_minutes=15)
+    sleep_records = build_sleep_records(merged_df, side, max_gap_in_minutes=MAX_BED_EXIT_MINUTES)
     if len(sleep_records) == 0:
         logger.warning(f'No sleep periods found for {side} side! {start_time} -> {end_time} ')
     else:
