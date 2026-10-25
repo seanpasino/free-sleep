@@ -16,6 +16,8 @@ Instantiate `StreamProcessor` with an initial piezo record and call `process_pie
 with new sensor data to continuously track and analyze biometric trends.
 """
 import sys
+import json
+import time
 from get_logger import get_logger
 from biometric_processor import BiometricProcessor
 from buffer import Buffer
@@ -23,6 +25,9 @@ from data_types import *
 import numpy as np
 
 logger = get_logger()
+
+SETTINGS_DB_PATH = '/persistent/free-sleep-data/lowdb/settingsDB.json'
+AWAY_CHECK_INTERVAL_S = 60
 
 
 class StreamProcessor:
@@ -43,6 +48,23 @@ class StreamProcessor:
             self.right_processor.hrv_window_seconds,
         )
         self.iteration_count = 0
+        self.last_away_check = 0.0
+
+    def refresh_away_mode(self):
+        now = time.time()
+        if now - self.last_away_check < AWAY_CHECK_INTERVAL_S:
+            return
+        self.last_away_check = now
+        try:
+            with open(SETTINGS_DB_PATH) as f:
+                settings = json.load(f)
+        except (OSError, ValueError):
+            return
+        for processor in (self.left_processor, self.right_processor):
+            away = bool(settings.get(processor.side, {}).get('awayMode', False))
+            if away != processor.away:
+                logger.info(f'Away mode {"on" if away else "off"} for {processor.side}: presence {"ignored" if away else "detected"} on that side')
+                processor.away = away
 
     def check_presence(self, left1_signal: np.ndarray, right1_signal: np.ndarray):
         self.left_processor.detect_presence(left1_signal)
@@ -65,6 +87,7 @@ class StreamProcessor:
         )
 
     def process_piezo_record(self, piezo_record: PiezoDualData):
+        self.refresh_away_mode()
         self.iteration_count += 1
         self.buffer.append(piezo_record)
         if self.iteration_count > self.left_processor.heart_rate_window_seconds:

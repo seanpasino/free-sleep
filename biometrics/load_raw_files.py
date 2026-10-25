@@ -93,8 +93,22 @@ def get_current_files(folder_path: str):
     ]
 
 
+# The firmware writes INT32_MAX in place of a sample it lost ("[sensor] sample lost"), on both
+# channels at once, in ~2% of records. The signal sits around -420k, so a marker is a ~2.1e9 spike
+# that passes the presence range check and swamps any window it lands in.
+LOST_PIEZO_SAMPLE = np.iinfo(np.int32).max
+
+
 def _decode_piezo_data(raw_bytes: bytes) -> np.ndarray:
-    return np.frombuffer(raw_bytes, dtype=np.int32)
+    samples = np.frombuffer(raw_bytes, dtype=np.int32)
+    lost = samples == LOST_PIEZO_SAMPLE
+    if not lost.any():
+        return samples
+    if lost.all():
+        return np.zeros_like(samples)
+    # Linear interpolation between the neighbouring good samples (nearest good sample at an edge)
+    ix = np.arange(len(samples))
+    return np.interp(ix, ix[~lost], samples[~lost]).astype(np.int32)
 
 
 def load_piezo_row(data: dict, side: Side):

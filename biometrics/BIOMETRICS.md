@@ -5,6 +5,9 @@
 - `stream.py`: Monitors the latest `.RAW` file and continuously processes biometric data.
 - `stream_processor.py`: Buffers piezoelectric sensor data for presence detection and biometric calculations.
 - `biometric_processor.py`: Processes real-time piezo data to extract heart rate, HRV, and breathing rate.
+- `piezo_vitals.py`: Breathing rate (from the heartbeat's amplitude envelope) and the HRV index (RMS of successive
+  differences between 10 s beat-interval estimates, with harmonic and outlier gates). The HRV index is not clinical
+  RMSSD and reads lower than it; heart rate still comes from heartpy.
 
 ## Sleep Detection (`sleep_detection/`)
 

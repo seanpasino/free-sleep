@@ -37,6 +37,8 @@ from heart.filtering import filter_signal, remove_baseline_wander
 from heart.heartpy import process
 from db import insert_vitals
 from data_types import *
+from piezo_vitals import breathing_rate as estimate_breathing_rate, hrv_index
+from cap_presence import CapPresence
 
 logger = get_logger()
 
@@ -60,6 +62,7 @@ class BiometricProcessor:
             debug=False,
             api_host='127.0.0.1',  # Added API configuration
             api_port=3000,  # Added API configuration
+            cap_state_dir='/persistent/free-sleep-data',
     ):
         self.present = False
         self.side = side
@@ -75,7 +78,7 @@ class BiometricProcessor:
         self.presence_api_url = f'http://{api_host}:{api_port}/api/metrics/presence'
 
         self.heart_rate_window_seconds = 3
-        self.breath_rate_window_seconds = 30
+        self.breath_rate_window_seconds = 60
         self.breath_rate_insertion_frequency = 10
 
         self.hrv_window_seconds = 300
@@ -111,18 +114,12 @@ class BiometricProcessor:
         self.combined_measurements: Deque[Measurement] = deque([], maxlen=100)
         self.debug_measurements: List[Measurement] = []
 
-        # Cap-based presence gating (dual EMA to separate human from pets)
-        self.CAP_FAST_ALPHA = 0.1       # Fast EMA: tracks cap changes in ~5 seconds
-        self.CAP_SLOW_ALPHA = 0.002     # Slow EMA: very sticky once established
-        self.CAP_STABLE_THRESHOLD = 30  # Max fast-slow deviation to allow baseline update
-        self.CAP_STD = 10.0             # Fixed std for normalising the score
-        self.CAP_SCORE_THRESHOLD = 150.0 # Combined score required to confirm human presence
-        self.CAP_INIT_PERIOD = 120      # Samples where both EMAs use fast alpha (60s at 2Hz)
-        self.CAP_MIN_SAMPLES = 120      # Gate disabled until warmup is complete
-        self.cap_fast = None            # Fast EMA {out, cen, in_}
-        self.cap_slow = None            # Slow EMA baseline {out, cen, in_}
-        self.cap_baseline_samples = 0
-        self.last_cap_score = 0.0
+        # Capacitance confirms a person-sized load (piezo alone can't tell a pet from a person)
+        self.cap_presence = CapPresence(side, state_dir=cap_state_dir)
+        # A side in away mode never registers presence: a solo sleeper near the middle loads the
+        # empty side's sensors (cap and piezo) enough to look like a second person
+        self.away = False
+        self.last_cap_score = 0.0  # Summed rise over the empty-bed baseline (raw counts)
 
     def init_tracking(self):
         # Running metrics
@@ -183,93 +180,32 @@ class BiometricProcessor:
                 time.sleep(retry_delay)
 
     def update_cap(self, cap_record: dict):
-        """Update dual-EMA cap baseline and compute a human-presence score.
-
-        Uses a fast EMA to track current cap readings and a slow EMA as a
-        stable empty-bed baseline. The slow EMA only updates when the fast
-        and slow EMAs are close (bed is empty / dog present), so it stays
-        anchored to empty-bed values even during a full night of sleep.
-        A human body causes a sustained 100-300+ count deviation across
-        sensors; a dog causes essentially zero deviation.
-        """
-        side_data = cap_record.get(self.side, {})
-        if not side_data or side_data.get('status') != 'good':
-            return
-
-        out = float(side_data.get('out', 0))
-        cen = float(side_data.get('cen', 0))
-        in_ = float(side_data.get('in', 0))
-
-        self.cap_baseline_samples += 1
-
-        if self.cap_fast is None:
-            self.cap_fast = {'out': out, 'cen': cen, 'in': in_}
-            self.cap_slow = {'out': out, 'cen': cen, 'in': in_}
-            return
-
-        fa = self.CAP_FAST_ALPHA
-        self.cap_fast['out'] = (1 - fa) * self.cap_fast['out'] + fa * out
-        self.cap_fast['cen'] = (1 - fa) * self.cap_fast['cen'] + fa * cen
-        self.cap_fast['in'] = (1 - fa) * self.cap_fast['in'] + fa * in_
-
-        dev_out = abs(self.cap_fast['out'] - self.cap_slow['out'])
-        dev_cen = abs(self.cap_fast['cen'] - self.cap_slow['cen'])
-        dev_in  = abs(self.cap_fast['in']  - self.cap_slow['in'])
-
-        # During the init period both EMAs use fast alpha so they converge
-        # together, preventing startup transients (e.g. animals repositioning
-        # at service start) from polluting the slow baseline.
-        if self.cap_baseline_samples <= self.CAP_INIT_PERIOD:
-            sa = self.CAP_FAST_ALPHA
-        elif dev_out < self.CAP_STABLE_THRESHOLD and dev_cen < self.CAP_STABLE_THRESHOLD and dev_in < self.CAP_STABLE_THRESHOLD:
-            # Only update slow baseline when readings are stable (empty bed or pet)
-            sa = self.CAP_SLOW_ALPHA
-        else:
-            sa = None  # Don't update slow — large deviation means someone is present
-
-        if sa is not None:
-            self.cap_slow['out'] = (1 - sa) * self.cap_slow['out'] + sa * out
-            self.cap_slow['cen'] = (1 - sa) * self.cap_slow['cen'] + sa * cen
-            self.cap_slow['in']  = (1 - sa) * self.cap_slow['in']  + sa * in_
-
-        if self.cap_baseline_samples >= self.CAP_MIN_SAMPLES:
-            self.last_cap_score = (dev_out + dev_cen + dev_in) / self.CAP_STD
+        self.cap_presence.update(cap_record.get(self.side, {}), cap_record.get('ts', time.time()), self.present)
+        self.last_cap_score = self.cap_presence.rise
 
     def detect_presence(self, signal: np.ndarray):
         signal_range = np.ptp(signal.astype(np.int64))
+        cap_confirmed = self.cap_presence.is_confirmed()
 
-        # Cap gate is inactive during the 60-second warmup period.
-        # The slow EMA is re-anchored to empty-bed values each time presence
-        # clears, so cap_score reliably stays high while a human is present
-        # and drops to ~0 within seconds of them leaving — even with pets on
-        # the bed.
-        cap_confirmed = (self.cap_baseline_samples < self.CAP_MIN_SAMPLES) or (self.last_cap_score >= self.CAP_SCORE_THRESHOLD)
-
-        if signal_range > 500_000 and cap_confirmed:
+        if signal_range > 500_000 and cap_confirmed and not self.away:
             self.not_present_for = 0
             self.present_for += 1
 
             if not self.present and self.present_for >= self.present_tolerance:
-                logger.info(f'User detected for {self.present_tolerance} consecutive seconds on {self.side} side (cap_score={self.last_cap_score:.1f}), marking present...')
+                logger.info(f'User detected for {self.present_tolerance} consecutive seconds on {self.side} side (cap rise={self.last_cap_score:.0f}), marking present...')
                 self.present = True
+                self.cap_presence.save()
                 self._update_presence_api(True)
         else:
             self.not_present_for += 1
             self.present_for = 0
             if self.not_present_for == self.no_presence_tolerance:
-                logger.info(f'User not detected for {self.no_presence_tolerance} seconds on {self.side} side, resetting...')
+                logger.info(f'User not detected for {self.no_presence_tolerance} seconds on {self.side} side (cap rise={self.last_cap_score:.0f}), resetting...')
                 self.present = False
-                # Re-anchor slow EMA to current readings so the baseline
-                # reflects empty-bed (± pets) rather than stale human-sleeping
-                # values that would cause false positives on the next cycle.
-                if self.cap_fast is not None:
-                    self.cap_slow = dict(self.cap_fast)
-                    self.last_cap_score = 0.0
-                    logger.info(f'Cap baseline reset on {self.side}: out={self.cap_slow["out"]:.0f} cen={self.cap_slow["cen"]:.0f} in={self.cap_slow["in"]:.0f}')
                 self.reset()
                 self._update_presence_api(False)
 
-    def _calculate_vitals(self, signal: np.ndarray, epoch: int, update_breathing=False, update_hrv=False):
+    def _calculate_vitals(self, signal: np.ndarray, epoch: int):
         try:
             # Remove outliers from signal
             data = interpolate_outliers_in_wave(
@@ -292,29 +228,11 @@ class BiometricProcessor:
             working_data, measurement = process(
                 data,
                 500,
-                breathing_method='fft',
                 bpmmin=40,
                 bpmmax=100,
                 windowsize=self.window_size,
-                calculate_breathing=update_breathing,
+                calculate_breathing=False,
             )
-            if update_breathing:
-                breathing_rate = measurement.get('breathingrate', 0) * 60
-                if (8 <= breathing_rate <= 20) and not np.isnan(breathing_rate):
-                    self.breath_rates.append(breathing_rate)
-                    breathing_rate = sum(self.breath_rates) / len(self.breath_rates)
-                    if not np.isnan(breathing_rate):
-                        self.breathing_rate = breathing_rate
-
-            if update_hrv:
-                hrv = measurement['sdnn']
-                if (8 <= hrv <= 200) and not np.isnan(hrv):
-                    self.hrv_rates.append(hrv)
-                    hrv = sum(self.hrv_rates) / len(self.hrv_rates)
-
-                    if not np.isnan(hrv):
-                        self.hrv = hrv
-
 
             if self.is_valid(measurement):
                 return {
@@ -457,8 +375,21 @@ class BiometricProcessor:
                 self.hr_std_2 = self.hr_std_range[1]
 
     def calculate_breath_rate(self, signal1: np.ndarray, epoch: int):
-        self._calculate_vitals(signal1, epoch, update_breathing=True)
-
+        try:
+            breathing_rate = estimate_breathing_rate(signal1)
+        except Exception as e:
+            logger.error(f'Breathing rate failed on {self.side}: {e}')
+            return
+        if breathing_rate is not None:
+            self.breath_rates.append(breathing_rate)
+            self.breathing_rate = sum(self.breath_rates) / len(self.breath_rates)
 
     def calculate_hrv(self, signal1: np.ndarray, epoch: int):
-        self._calculate_vitals(signal1, epoch, update_hrv=True)
+        try:
+            hrv = hrv_index(signal1)
+        except Exception as e:
+            logger.error(f'HRV failed on {self.side}: {e}')
+            return
+        if hrv is not None:
+            self.hrv_rates.append(hrv)
+            self.hrv = sum(self.hrv_rates) / len(self.hrv_rates)
