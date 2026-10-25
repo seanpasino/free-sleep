@@ -16,7 +16,7 @@ type SurfaceTemps = { out: number; cen: number; in: number };
 
 export type SensorSnapshot = {
   ts: number;
-  // Lower of the two ambient sensors: the bedTemp one reads up to ~6°F high while the Pod idles
+  // bedTemp's ambient; null when it is stale, which means no room offset
   roomF: number | null;
   humidity: number | null;
   waterF: Sides<number> | null;
@@ -111,7 +111,10 @@ export const readLatestSensors = (): SensorSnapshot | null => {
   if (!bedTemp) return null;
 
   const fresh = (record?: RawRecord) => record && Date.now() / 1000 - record.ts < STALE_SECONDS;
-  const ambients = [bedTemp, frzTemp].filter(fresh).map(r => r!.amb).filter(a => typeof a === 'number');
+  // Only bedTemp's ambient tracks the room (HA bedroom sensor -0.3 ± 0.5°F, idle or running).
+  // frzTemp's sits in the pump unit and follows the water and heatsink: 7°F low after an idle
+  // evening, 2°F high while cooling, and falling while warming.
+  const roomCentiC = fresh(bedTemp) && typeof bedTemp.amb === 'number' ? bedTemp.amb : null;
   const surface = (side: RawRecord) => ({
     out: centiCToF(side.out),
     cen: centiCToF(side.cen),
@@ -120,7 +123,7 @@ export const readLatestSensors = (): SensorSnapshot | null => {
 
   return {
     ts: bedTemp.ts,
-    roomF: ambients.length ? centiCToF(Math.min(...ambients)) : null,
+    roomF: roomCentiC === null ? null : centiCToF(roomCentiC),
     humidity: fresh(bedTemp) ? bedTemp.hu / 100 : null,
     waterF: frzTemp ? { left: centiCToF(frzTemp.left), right: centiCToF(frzTemp.right) } : null,
     waterTargetF: frzTherm ? { left: cToF(frzTherm.left.target), right: cToF(frzTherm.right.target) } : null,
