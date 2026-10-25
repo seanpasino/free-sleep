@@ -14,7 +14,7 @@ print_json_if_exists() {
       | sed $'s/^/\033[0;90m/' \
       | sed $'s/$/\033[0m/'
   else
-    print_red "File not found: $file_path ❌"
+    echo "File not found: $file_path ❌"
   fi
 }
 print_json_if_exists "/home/dac/free-sleep/server/src/serverInfo.json" "Server info"
@@ -35,16 +35,16 @@ if [ -d /home/dac/free-sleep ]; then
 fi
 
 echo "Attempting to reinstall free-sleep..."
-if /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/seanpasino/free-sleep/seanpasino/personal/scripts/install.sh)"; then
+update_succeeded=false
+# Check the download separately: running an empty script after a failed curl exits successfully,
+# which used to delete the backup and leave no install at all.
+if installer_source=$(curl -fsSL https://raw.githubusercontent.com/seanpasino/free-sleep/seanpasino/personal/scripts/install.sh) \
+  && [ -n "$installer_source" ] \
+  && /bin/bash -c "$installer_source" \
+  && [ -d "$APP_DIR" ]; then
   echo "Reinstall successful."
+  update_succeeded=true
   rm -rf "$BACKUP_PATH"
-  if [ -d "$APP_DIR" ]; then
-    rm -rf "$BACKUP_PATH"
-  else
-    echo "Install path missing after installer; restoring backup..."
-    rm -rf "$APP_DIR"
-    mv "$BACKUP_PATH" "$APP_DIR"
-  fi
 else
   echo "Reinstall failed. Restoring from backup..."
   rm -rf /home/dac/free-sleep
@@ -56,5 +56,9 @@ systemctl start free-sleep || true
 
 # Block internet access again
 sh /home/dac/free-sleep/scripts/block_internet_access.sh
+if [ "$update_succeeded" != true ]; then
+  echo "Update failed; the previous installation was restored." >&2
+  exit 1
+fi
 echo -e "\033[0;32mUpdate completed successfully!\033[0m"
 echo -e "\033[0;32mRestart your pod with 'reboot -h now'\033[0m"
