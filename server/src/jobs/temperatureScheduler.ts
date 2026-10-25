@@ -10,6 +10,19 @@ import serverStatus from '../serverStatus.js';
 import settingsDB from '../db/settings.js';
 import logger from '../logger.js';
 import { getAmbientOffset, isWakeStep, logComfortEvent, recordAppliedOffset } from './comfort.js';
+import { connectFranken } from '../8sleep/frankenServer.js';
+
+// The side's current target, or null when it is off or the Pod can't be read
+const currentTargetF = async (side: Side): Promise<number | null> => {
+  try {
+    const franken = await connectFranken();
+    const status = await franken.getDeviceStatus(false);
+    return status[side].isOn ? status[side].targetTemperatureF : null;
+  } catch (error) {
+    logger.warn(`Could not read the current ${side} target: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+};
 
 
 const scheduleAdjustment = (timeZone: TimeZone, side: Side, day: DayOfWeek, time: Time, temperature: number) => {
@@ -40,9 +53,16 @@ const scheduleAdjustment = (timeZone: TimeZone, side: Side, day: DayOfWeek, time
 
       const wakeStep = await isWakeStep(temperature);
       const { offsetF, roomF } = wakeStep ? { offsetF: 0, roomF: null } : await getAmbientOffset();
-      const targetTemperatureF = Math.min(110, temperature + offsetF);
+      let targetTemperatureF = Math.min(110, temperature + offsetF);
       if (offsetF) {
         logJob(`Room is ${roomF}°F, warming scheduled ${temperature}°F by ${offsetF}°F`, side, day, dayOfWeekIndex, time);
+      }
+      // A wake step only ever warms the bed. The room offset and re-checks can already have carried
+      // the bed above it (2026-10-24: the 08:30 86°F step cooled the bed from 87°F).
+      const currentF = wakeStep ? await currentTargetF(side) : null;
+      if (currentF !== null && currentF > targetTemperatureF) {
+        logJob(`Wake step: keeping ${currentF}°F instead of scheduled ${temperature}°F`, side, day, dayOfWeekIndex, time);
+        targetTemperatureF = currentF;
       }
       await updateDeviceStatus({
         [side]: {
@@ -50,7 +70,9 @@ const scheduleAdjustment = (timeZone: TimeZone, side: Side, day: DayOfWeek, time
         }
       });
       recordAppliedOffset(side, wakeStep ? null : offsetF);
-      logComfortEvent('schedule', { side, step: time, wakeStep, scheduledF: temperature, offsetF, appliedF: targetTemperatureF, roomF });
+      logComfortEvent('schedule', {
+        side, step: time, wakeStep, scheduledF: temperature, offsetF, currentF, appliedF: targetTemperatureF, roomF,
+      });
       serverStatus.status.temperatureSchedule.status = 'healthy';
       serverStatus.status.temperatureSchedule.message = '';
     } catch (error: unknown) {
