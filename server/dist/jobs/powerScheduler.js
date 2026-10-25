@@ -6,6 +6,7 @@ import moment from 'moment-timezone';
 import serverStatus from '../serverStatus.js';
 import logger from '../logger.js';
 import servicesDB from '../db/services.js';
+import { MAX_TARGET_F } from '../8sleep/temperatureLevels.js';
 import memoryDB from '../db/memoryDB.js';
 import { getAmbientOffset, logComfortEvent, recordAppliedOffset } from './comfort.js';
 export const schedulePowerOn = (settingsData, side, day, power) => {
@@ -28,7 +29,7 @@ export const schedulePowerOn = (settingsData, side, day, power) => {
         try {
             logJob('Executing power on job', side, day, dayOfWeekIndex, time);
             const { offsetF, roomF } = await getAmbientOffset();
-            const targetTemperatureF = Math.min(110, power.onTemperature + offsetF);
+            const targetTemperatureF = Math.min(MAX_TARGET_F, power.onTemperature + offsetF);
             if (offsetF) {
                 logJob(`Room is ${roomF}°F, warming power-on ${power.onTemperature}°F by ${offsetF}°F`, side, day, dayOfWeekIndex, time);
             }

@@ -8,6 +8,7 @@ import memoryDB from '../db/memoryDB.js';
 import { recordHeatStateLine } from './heatState.js';
 import logger from '../logger.js';
 import { logComfortEvent } from '../jobs/comfort.js';
+import { MAX_TARGET_F, MIN_TARGET_F } from './temperatureLevels.js';
 
 type Side = 'left' | 'right';
 
@@ -18,8 +19,6 @@ const POLL_INTERVAL = 1000;
 const DEBOUNCE_MS = 700;
 // Presses this soon after stopping an alarm are part of stopping it, not temperature changes
 const ALARM_DISMISS_GRACE_MS = 5_000;
-const MIN_TEMP_F = 55;
-const MAX_TEMP_F = 110;
 // A middle press held at least this long toggles that side's power on/off.
 // The middle button is ALWAYS logged as `type: short` no matter how long it's
 // held, so we gate on the firmware-reported hold duration instead of the type.
@@ -216,7 +215,7 @@ export class ButtonMonitor {
         }
 
         const currentTemp = status[side].targetTemperatureF;
-        const newTemp = Math.min(MAX_TEMP_F, Math.max(MIN_TEMP_F, currentTemp + delta));
+        const newTemp = Math.min(MAX_TARGET_F, Math.max(MIN_TARGET_F, currentTemp + delta));
         if (newTemp === currentTemp) continue;
 
         logger.info(`ButtonMonitor: ${side} temp ${currentTemp} -> ${newTemp} (${delta > 0 ? '+' : ''}${delta})`);

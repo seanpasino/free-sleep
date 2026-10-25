@@ -7,6 +7,7 @@ import settingsDB from '../db/settings.js';
 import logger from '../logger.js';
 import { getAmbientOffset, isWakeStep, logComfortEvent, recordAppliedOffset } from './comfort.js';
 import { connectFranken } from '../8sleep/frankenServer.js';
+import { MAX_TARGET_F } from '../8sleep/temperatureLevels.js';
 // The side's current target, or null when it is off or the Pod can't be read
 const currentTargetF = async (side) => {
     try {
@@ -42,7 +43,7 @@ const scheduleAdjustment = (timeZone, side, day, time, temperature) => {
             }
             const wakeStep = await isWakeStep(temperature);
             const { offsetF, roomF } = wakeStep ? { offsetF: 0, roomF: null } : await getAmbientOffset();
-            let targetTemperatureF = Math.min(110, temperature + offsetF);
+            let targetTemperatureF = Math.min(MAX_TARGET_F, temperature + offsetF);
             if (offsetF) {
                 logJob(`Room is ${roomF}°F, warming scheduled ${temperature}°F by ${offsetF}°F`, side, day, dayOfWeekIndex, time);
             }

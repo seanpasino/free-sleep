@@ -5,10 +5,9 @@ import logger from '../../logger.js';
 import settingsDB from '../../db/settings.js';
 import memoryDB from '../../db/memoryDB.js';
 import { INVERTED_SETTINGS_KEY_MAPPING } from '../../8sleep/loadDeviceStatus.js';
-const calculateLevelFromF = (temperatureF) => {
-    const level = (temperatureF - 82.5) / 27.5 * 100;
-    return Math.round(level).toString();
-};
+import { fToLevel } from '../../8sleep/temperatureLevels.js';
+// Requests outside the Pod's 59-108°F range land on the nearest end
+const calculateLevelFromF = (temperatureF) => fToLevel(temperatureF).toString();
 const updateSide = async (side, sideStatus) => {
     await settingsDB.read();
     const settings = settingsDB.data;

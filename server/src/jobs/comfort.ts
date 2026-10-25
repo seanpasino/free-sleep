@@ -10,6 +10,7 @@ import { readLatestSensors, SensorSnapshot } from '../8sleep/rawSensors.js';
 import { connectFranken } from '../8sleep/frankenServer.js';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
 import logger from '../logger.js';
+import { MAX_TARGET_F, MIN_TARGET_F } from '../8sleep/temperatureLevels.js';
 
 const COMFORT_LOG = '/persistent/free-sleep-data/comfort-log.jsonl';
 // Outside lowdb/ on purpose: writes there make the job scheduler look for changes
@@ -142,7 +143,7 @@ const recheckSide = async (side: Side, sideState: SideState) => {
   const stepF = Math.sign(driftF);
   const offsetF = sideState.appliedOffsetF + stepF;
   const fromF = status[side].targetTemperatureF;
-  const toF = Math.min(110, Math.max(55, fromF + stepF));
+  const toF = Math.min(MAX_TARGET_F, Math.max(MIN_TARGET_F, fromF + stepF));
   logger.info(`Comfort: room ${roomF}°F, ${side} ${fromF}°F -> ${toF}°F (offset ${sideState.appliedOffsetF} -> ${offsetF})`);
   await updateDeviceStatus({ [side]: { targetTemperatureF: toF } });
   recordAppliedOffset(side, offsetF);

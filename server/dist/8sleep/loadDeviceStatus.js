@@ -10,6 +10,7 @@ import serverInfo from '../serverInfo.json' with { type: 'json' };
 import { WIFI_SIGNAL_STRENGTH } from './wifiSignalStrength.js';
 import { GestureSchema } from '../db/settingsSchema.js';
 import { getHeatActive } from './heatState.js';
+import { levelToF } from './temperatureLevels.js';
 const RawDeviceData = z.object({
     tgHeatLevelR: z.string().regex(/^-?\d+$/, { message: 'tgHeatLevelR must be a numeric value in a string' }),
     tgHeatLevelL: z.string().regex(/^-?\d+$/, { message: 'tgHeatLevelL must be a numeric value in a string' }),
@@ -37,25 +38,8 @@ const parseRawDeviceData = (response) => {
         throw error;
     }
 };
-// Scale goes from -100 < - > 100
-// Low  -> 55
-// High -> 110
-// 0 -> 82.5f
-// -100 -> 55f
-// 100 -> 110f
-const calculateTempInF = (value) => {
-    const level = Number(value);
-    if (level === 0) {
-        // Technically 0 is 82.5, rounding the temperature simplifies everything though...
-        return 83;
-    }
-    else if (level < 0) {
-        return Math.round(82.5 - (-1 * level / 100) * 27.5);
-    }
-    else {
-        return Math.round(82.5 + (level / 100) * 27.5);
-    }
-};
+// Levels run -100..100; the firmware's own curve (temperatureLevels.ts) gives the water temperature
+const calculateTempInF = (value) => levelToF(Number(value));
 export const SETTINGS_KEY_MAPPING = {
     gl: 'gainLeft',
     gr: 'gainRight',
