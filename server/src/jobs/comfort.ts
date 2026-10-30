@@ -242,12 +242,11 @@ const recheckSide = async (side: Side, sideState: SideState) => {
 };
 
 // One re-check tick for a side: trim the water target toward holding the surface at the setpoint.
+// No schedule-override check here, unlike recheckSide: a manual temperature (which sets the
+// override) is exactly the setpoint this loop should hold; the override only pauses schedule steps.
 const recheckSideSurface = async (side: Side): Promise<void> => {
   await settingsDB.read();
-  const sideSettings = settingsDB.data[side];
-  if (sideSettings.awayMode) return;
-  const { expiresAt } = sideSettings.scheduleOverrides.temperatureSchedules;
-  if (expiresAt && moment(expiresAt).isAfter(moment())) return;
+  if (settingsDB.data[side].awayMode) return;
 
   const cfg = comfortDB.data.surfaceControl;
   const franken = await connectFranken();
