@@ -27,10 +27,12 @@ export type Comfort = {
     // Which of the three surface probes to control on. 'cen' (center/torso zone) is recommended;
     // 'avg' is dragged low by the cold outer edge, 'max'/'min' chase body heat / the cold edge.
     probe: SurfaceProbe;
-    // Desired surface = setpoint + this. Leave 0 for a literal surface=setpoint; raise it if the
-    // bed feels too cool once you are lying on it (body heat makes the occupied zone read high,
-    // so the loop cools below the number to compensate).
-    calibrationOffsetF: number;
+    // Desired surface = setpoint + this. A single number applies to both sides; use
+    // { left, right } for per-side calibration. The two surface probes are NOT identical on this
+    // Pod: with an empty bed the right reads ~1.8°F above its water (and the left tracks water),
+    // so driving the right's raw reading to the setpoint runs that side cool — add a positive
+    // right calibration if the side you sleep on ends up too cold.
+    calibrationOffsetF: number | { left: number; right: number };
     // No correction while |surface - desired| is under this, so the bed does not flap at a rounding edge
     deadbandF: number;
     // Max water-target move per 15 min re-check (matches the ~15-20 min water settle time)

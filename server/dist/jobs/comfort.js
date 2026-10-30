@@ -259,7 +259,11 @@ const recheckSideSurface = async (side) => {
         logger.debug(`Comfort(surface): ${side} no fresh surface reading — skipping`);
         return;
     }
-    const desiredF = sideState.setpointF + cfg.calibrationOffsetF;
+    // calibrationOffsetF is either one number for both sides or a per-side { left, right }
+    const calF = typeof cfg.calibrationOffsetF === 'number'
+        ? cfg.calibrationOffsetF
+        : (cfg.calibrationOffsetF?.[side] ?? 0);
+    const desiredF = sideState.setpointF + calF;
     const errorF = desiredF - surfaceF;
     if (Math.abs(errorF) < cfg.deadbandF) {
         logger.debug(`Comfort(surface): ${side} surface ${surfaceF}°F vs desired ${desiredF}°F — in deadband`);
