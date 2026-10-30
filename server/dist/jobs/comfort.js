@@ -13,7 +13,15 @@ import { MAX_TARGET_F, MIN_TARGET_F } from '../8sleep/temperatureLevels.js';
 const COMFORT_LOG = '/persistent/free-sleep-data/comfort-log.jsonl';
 // Outside lowdb/ on purpose: writes there make the job scheduler look for changes
 const COMFORT_STATE = '/persistent/free-sleep-data/comfort-state.json';
+// Separate file so closed-loop surface state stays independent of the ambient-offset bookkeeping
+// (and is simply orphaned, harmless, if surface control is reverted)
+const SURFACE_STATE = '/persistent/free-sleep-data/surface-state.json';
 const SNAPSHOT_EVERY_MINUTES = 5;
+// Surface control: median the chosen probe over this window to shed the ~0.2°F sample jitter
+const SURFACE_WINDOW_MS = 15 * 60 * 1000;
+const MIN_SURFACE_SAMPLES = 2;
+// Ignore surface readings older than this (a stale bedTemp record means no trustworthy surface temp)
+const SURFACE_STALE_SECONDS = 10 * 60;
 // Winter heating cycles swing the bedroom ~1°F within the hour, so the room is a 30 min median
 const ROOM_WINDOW_MS = 30 * 60 * 1000;
 const MIN_ROOM_SAMPLES = 5;
@@ -52,6 +60,77 @@ const medianRoomF = () => {
     const mid = Math.floor(sorted.length / 2);
     const median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
     return Math.round(median * 10) / 10;
+};
+// ----- Closed-loop surface-temperature control -----------------------------------------------
+// Rolling samples of the chosen surface probe, per side, for temporal median smoothing.
+const surfaceSamples = { left: [], right: [] };
+const probeValue = (zones, probe) => {
+    switch (probe) {
+        case 'avg': return (zones.out + zones.cen + zones.in) / 3;
+        case 'max': return Math.max(zones.out, zones.cen, zones.in);
+        case 'min': return Math.min(zones.out, zones.cen, zones.in);
+        case 'cen':
+        default: return zones.cen;
+    }
+};
+const sampleSurface = (probe, sensors = latestSensors()) => {
+    const now = Date.now();
+    if (sensors?.surfaceF && typeof sensors.ts === 'number' && now / 1000 - sensors.ts < SURFACE_STALE_SECONDS) {
+        surfaceSamples.left.push({ at: now, f: probeValue(sensors.surfaceF.left, probe) });
+        surfaceSamples.right.push({ at: now, f: probeValue(sensors.surfaceF.right, probe) });
+    }
+    for (const side of ['left', 'right']) {
+        while (surfaceSamples[side].length && now - surfaceSamples[side][0].at > SURFACE_WINDOW_MS)
+            surfaceSamples[side].shift();
+    }
+};
+// Median of the chosen probe over the window; null until there are enough fresh samples
+const medianSurfaceF = (side) => {
+    const arr = surfaceSamples[side];
+    if (arr.length < MIN_SURFACE_SAMPLES)
+        return null;
+    const sorted = arr.map(s => s.f).sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    const median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    return Math.round(median * 10) / 10;
+};
+const readSurfaceState = () => {
+    try {
+        return JSON.parse(fs.readFileSync(SURFACE_STATE, 'utf8'));
+    }
+    catch {
+        return {};
+    }
+};
+const writeSurfaceState = (state) => {
+    try {
+        fs.writeFileSync(SURFACE_STATE, JSON.stringify(state));
+    }
+    catch (error) {
+        logger.warn(`Comfort: could not write surface state: ${error instanceof Error ? error.message : String(error)}`);
+    }
+};
+// Schedule steps / power-on set the intended surface setpoint (and reset the trim); power-off and
+// wake steps pass null to suspend the loop for that side until the next normal step seeds it again.
+export const recordSurfaceSetpoint = (side, setpointF) => {
+    const state = readSurfaceState();
+    if (setpointF === null) {
+        delete state[side];
+    }
+    else {
+        state[side] = { setpointF, trimF: 0, lastCommandedF: setpointF, at: new Date().toISOString() };
+    }
+    writeSurfaceState(state);
+};
+export const surfaceControlEnabled = async () => {
+    try {
+        await comfortDB.read();
+        return comfortDB.data.surfaceControl?.enabled === true;
+    }
+    catch (error) {
+        logger.error(error);
+        return false;
+    }
 };
 export const getAmbientOffset = async () => {
     try {
@@ -141,9 +220,84 @@ const recheckSide = async (side, sideState) => {
     recordAppliedOffset(side, offsetF);
     logComfortEvent('recheck', { side, roomF, exactOffsetF, offsetF, fromF, toF });
 };
+// One re-check tick for a side: trim the water target toward holding the surface at the setpoint.
+const recheckSideSurface = async (side) => {
+    await settingsDB.read();
+    const sideSettings = settingsDB.data[side];
+    if (sideSettings.awayMode)
+        return;
+    const { expiresAt } = sideSettings.scheduleOverrides.temperatureSchedules;
+    if (expiresAt && moment(expiresAt).isAfter(moment()))
+        return;
+    const cfg = comfortDB.data.surfaceControl;
+    const franken = await connectFranken();
+    const status = await franken.getDeviceStatus(false);
+    if (!status[side].isOn)
+        return;
+    const state = readSurfaceState();
+    const currentTargetF = status[side].targetTemperatureF;
+    const sideState = state[side];
+    const now = () => new Date().toISOString();
+    // Seed on first run (control switched on without a schedule step yet): hold the current target,
+    // then wait a settle cycle before trimming.
+    if (!sideState) {
+        state[side] = { setpointF: currentTargetF, trimF: 0, lastCommandedF: currentTargetF, at: now() };
+        writeSurfaceState(state);
+        logger.debug(`Comfort(surface): ${side} seeded setpoint ${currentTargetF}°F`);
+        return;
+    }
+    // A target we did not command means the app, a button, or a schedule step moved it: adopt it as
+    // the new setpoint and let the loop re-converge from zero trim.
+    if (currentTargetF !== sideState.lastCommandedF) {
+        state[side] = { setpointF: currentTargetF, trimF: 0, lastCommandedF: currentTargetF, at: now() };
+        writeSurfaceState(state);
+        logger.debug(`Comfort(surface): ${side} target moved to ${currentTargetF}°F externally — re-anchoring`);
+        return;
+    }
+    const surfaceF = medianSurfaceF(side);
+    if (surfaceF === null) {
+        logger.debug(`Comfort(surface): ${side} no fresh surface reading — skipping`);
+        return;
+    }
+    const desiredF = sideState.setpointF + cfg.calibrationOffsetF;
+    const errorF = desiredF - surfaceF;
+    if (Math.abs(errorF) < cfg.deadbandF) {
+        logger.debug(`Comfort(surface): ${side} surface ${surfaceF}°F vs desired ${desiredF}°F — in deadband`);
+        return;
+    }
+    const trimF = Math.max(-cfg.maxTrimF, Math.min(cfg.maxTrimF, sideState.trimF + Math.sign(errorF) * cfg.stepF));
+    const newTargetF = Math.min(MAX_TARGET_F, Math.max(MIN_TARGET_F, sideState.setpointF + trimF));
+    if (newTargetF === currentTargetF) {
+        // Trim saturated (maxTrimF) or clamped to the Pod's range — record it but issue no command.
+        state[side] = { ...sideState, trimF, at: now() };
+        writeSurfaceState(state);
+        logger.debug(`Comfort(surface): ${side} surface ${surfaceF}°F vs ${desiredF}°F, water trim at limit (${trimF}°F)`);
+        return;
+    }
+    logger.info(`Comfort(surface): ${side} surface ${surfaceF}°F -> ${desiredF}°F; `
+        + `water ${currentTargetF}°F -> ${newTargetF}°F (trim ${sideState.trimF} -> ${trimF})`);
+    await updateDeviceStatus({ [side]: { targetTemperatureF: newTargetF } });
+    state[side] = { setpointF: sideState.setpointF, trimF, lastCommandedF: newTargetF, at: now() };
+    writeSurfaceState(state);
+    logComfortEvent('surface_recheck', {
+        side, surfaceF, desiredF, setpointF: sideState.setpointF, trimF, fromF: currentTargetF, toF: newTargetF,
+    });
+};
 const recheck = async () => {
     try {
         await comfortDB.read();
+        // Closed-loop surface control owns the correction when enabled, superseding ambient re-checks.
+        if (comfortDB.data.surfaceControl?.enabled) {
+            const sstate = readSurfaceState();
+            for (const side of ['left', 'right']) {
+                const ss = sstate[side];
+                // Let a fresh setpoint/seed settle before trimming; an unseeded side is seeded inside.
+                if (ss && Date.now() - Date.parse(ss.at) < RECHECK_SETTLE_MS)
+                    continue;
+                await recheckSideSurface(side);
+            }
+            return;
+        }
         if (!comfortDB.data.ambientCompensation.enabled)
             return;
         const state = readState();
@@ -180,6 +334,7 @@ export const startComfortMonitoring = () => {
     everyMinute(() => {
         const sensors = latestSensors();
         sampleRoom(sensors);
+        sampleSurface(comfortDB.data.surfaceControl?.probe ?? 'cen', sensors);
         const minute = new Date().getMinutes();
         if (minute % SNAPSHOT_EVERY_MINUTES === 0 && (sensors?.heatingEnabled?.left || sensors?.heatingEnabled?.right)) {
             logComfortEvent('snapshot', { roomMedianF: medianRoomF() }, sensors);

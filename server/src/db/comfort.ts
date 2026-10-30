@@ -5,6 +5,8 @@ import { Low } from 'lowdb';
 import { JSONFile } from 'lowdb/node';
 import config from '../config.js';
 
+export type SurfaceProbe = 'cen' | 'avg' | 'max' | 'min';
+
 export type Comfort = {
   ambientCompensation: {
     enabled: boolean;
@@ -16,6 +18,26 @@ export type Comfort = {
     // Steps this warm are the wake-up spike: applied as scheduled, and re-checks stop until the next night
     wakeStepMinF: number;
   };
+  // Closed-loop surface-temperature control. When enabled it supersedes ambientCompensation's
+  // re-checks: instead of feed-forward from room temp, it trims the water target until the bed's
+  // measured surface temperature holds at the setpoint, removing the room/body-driven offset.
+  // enabled:false reproduces the previous behavior exactly.
+  surfaceControl: {
+    enabled: boolean;
+    // Which of the three surface probes to control on. 'cen' (center/torso zone) is recommended;
+    // 'avg' is dragged low by the cold outer edge, 'max'/'min' chase body heat / the cold edge.
+    probe: SurfaceProbe;
+    // Desired surface = setpoint + this. Leave 0 for a literal surface=setpoint; raise it if the
+    // bed feels too cool once you are lying on it (body heat makes the occupied zone read high,
+    // so the loop cools below the number to compensate).
+    calibrationOffsetF: number;
+    // No correction while |surface - desired| is under this, so the bed does not flap at a rounding edge
+    deadbandF: number;
+    // Max water-target move per 15 min re-check (matches the ~15-20 min water settle time)
+    stepF: number;
+    // Clamp on the total water offset the loop may build above/below the setpoint (anti-windup)
+    maxTrimF: number;
+  };
 };
 
 const defaultData: Comfort = {
@@ -25,6 +47,14 @@ const defaultData: Comfort = {
     gain: 1,
     maxOffsetF: 10,
     wakeStepMinF: 85,
+  },
+  surfaceControl: {
+    enabled: false,
+    probe: 'cen',
+    calibrationOffsetF: 0,
+    deadbandF: 0.75,
+    stepF: 1,
+    maxTrimF: 8,
   },
 };
 

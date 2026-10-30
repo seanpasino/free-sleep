@@ -5,7 +5,7 @@ import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js
 import serverStatus from '../serverStatus.js';
 import settingsDB from '../db/settings.js';
 import logger from '../logger.js';
-import { getAmbientOffset, isWakeStep, logComfortEvent, recordAppliedOffset } from './comfort.js';
+import { getAmbientOffset, isWakeStep, logComfortEvent, recordAppliedOffset, recordSurfaceSetpoint, surfaceControlEnabled } from './comfort.js';
 import { connectFranken } from '../8sleep/frankenServer.js';
 import { MAX_TARGET_F } from '../8sleep/temperatureLevels.js';
 // The side's current target, or null when it is off or the Pod can't be read
@@ -42,7 +42,9 @@ const scheduleAdjustment = (timeZone, side, day, time, temperature) => {
                 }
             }
             const wakeStep = await isWakeStep(temperature);
-            const { offsetF, roomF } = wakeStep ? { offsetF: 0, roomF: null } : await getAmbientOffset();
+            // Surface control builds its own water offset via feedback, so skip ambient feed-forward.
+            const surfaceOn = await surfaceControlEnabled();
+            const { offsetF, roomF } = (wakeStep || surfaceOn) ? { offsetF: 0, roomF: null } : await getAmbientOffset();
             let targetTemperatureF = Math.min(MAX_TARGET_F, temperature + offsetF);
             if (offsetF) {
                 logJob(`Room is ${roomF}°F, warming scheduled ${temperature}°F by ${offsetF}°F`, side, day, dayOfWeekIndex, time);
@@ -59,7 +61,10 @@ const scheduleAdjustment = (timeZone, side, day, time, temperature) => {
                     targetTemperatureF,
                 }
             });
-            recordAppliedOffset(side, wakeStep ? null : offsetF);
+            recordAppliedOffset(side, (wakeStep || surfaceOn) ? null : offsetF);
+            // Anchor the surface loop to this step's intended temperature (suspend it on a wake spike).
+            if (surfaceOn)
+                recordSurfaceSetpoint(side, wakeStep ? null : temperature);
             logComfortEvent('schedule', {
                 side, step: time, wakeStep, scheduledF: temperature, offsetF, currentF, appliedF: targetTemperatureF, roomF,
             });
