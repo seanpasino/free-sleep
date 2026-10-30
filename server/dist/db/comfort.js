@@ -15,10 +15,6 @@ const defaultData = {
     surfaceControl: {
         enabled: false,
         probe: 'cen',
-        calibrationOffsetF: 0,
-        deadbandF: 0.75,
-        stepF: 1,
-        maxTrimF: 8,
     },
 };
 const file = new JSONFile(`${config.lowDbFolder}comfortDB.json`);

@@ -9,6 +9,7 @@ import settingsDB from '../../db/settings.js';
 import memoryDB from '../../db/memoryDB.js';
 import { INVERTED_SETTINGS_KEY_MAPPING } from '../../8sleep/loadDeviceStatus.js';
 import { fToLevel } from '../../8sleep/temperatureLevels.js';
+import { bedControlEnabled, setBedSetpoint } from '../../8sleep/bedControl.js';
 
 // Requests outside the Pod's 59-108°F range land on the nearest end
 const calculateLevelFromF = (temperatureF: number) => fToLevel(temperatureF).toString();
@@ -42,7 +43,9 @@ const updateSide = async (side: 'left' | 'right', sideStatus: DeepPartial<SideSt
   }
 
   if (targetTemperatureF) {
-    const level = calculateLevelFromF(targetTemperatureF);
+    // With bed control on, the requested temperature is the bed setpoint; send the water target for it
+    const waterF = bedControlEnabled() ? setBedSetpoint(side, targetTemperatureF) : targetTemperatureF;
+    const level = calculateLevelFromF(waterF);
     if (updateLeft) await executeFunction('TEMP_LEVEL_LEFT', level);
     if (updateRight) await executeFunction('TEMP_LEVEL_RIGHT', level);
   }

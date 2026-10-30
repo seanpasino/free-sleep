@@ -9,7 +9,7 @@ import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js
 import serverStatus from '../serverStatus.js';
 import settingsDB from '../db/settings.js';
 import logger from '../logger.js';
-import { getAmbientOffset, isWakeStep, logComfortEvent, recordAppliedOffset, recordSurfaceSetpoint, surfaceControlEnabled } from './comfort.js';
+import { getAmbientOffset, isWakeStep, logComfortEvent, recordAppliedOffset, surfaceControlEnabled } from './comfort.js';
 import { connectFranken } from '../8sleep/frankenServer.js';
 import { MAX_TARGET_F } from '../8sleep/temperatureLevels.js';
 
@@ -53,7 +53,7 @@ const scheduleAdjustment = (timeZone: TimeZone, side: Side, day: DayOfWeek, time
       }
 
       const wakeStep = await isWakeStep(temperature);
-      // Surface control builds its own water offset via feedback, so skip ambient feed-forward.
+      // Bed control holds the bed temperature itself, so skip the room offset.
       const surfaceOn = await surfaceControlEnabled();
       const { offsetF, roomF } = (wakeStep || surfaceOn) ? { offsetF: 0, roomF: null } : await getAmbientOffset();
       let targetTemperatureF = Math.min(MAX_TARGET_F, temperature + offsetF);
@@ -73,8 +73,6 @@ const scheduleAdjustment = (timeZone: TimeZone, side: Side, day: DayOfWeek, time
         }
       });
       recordAppliedOffset(side, (wakeStep || surfaceOn) ? null : offsetF);
-      // Anchor the surface loop to this step's intended temperature (suspend it on a wake spike).
-      if (surfaceOn) recordSurfaceSetpoint(side, wakeStep ? null : temperature);
       logComfortEvent('schedule', {
         side, step: time, wakeStep, scheduledF: temperature, offsetF, currentF, appliedF: targetTemperatureF, roomF,
       });

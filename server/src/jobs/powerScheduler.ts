@@ -10,7 +10,7 @@ import logger from '../logger.js';
 import servicesDB from '../db/services.js';
 import { MAX_TARGET_F } from '../8sleep/temperatureLevels.js';
 import memoryDB from '../db/memoryDB.js';
-import { getAmbientOffset, logComfortEvent, recordAppliedOffset, recordSurfaceSetpoint, surfaceControlEnabled } from './comfort.js';
+import { getAmbientOffset, logComfortEvent, recordAppliedOffset, surfaceControlEnabled } from './comfort.js';
 
 
 
@@ -33,7 +33,7 @@ export const schedulePowerOn = (settingsData: Settings, side: Side, day: DayOfWe
     try {
       logJob('Executing power on job', side, day, dayOfWeekIndex, time);
 
-      // Surface control builds its own water offset via feedback, so skip the ambient feed-forward.
+      // Bed control holds the bed temperature itself, so skip the room offset.
       const surfaceOn = await surfaceControlEnabled();
       const { offsetF, roomF } = surfaceOn ? { offsetF: 0, roomF: null } : await getAmbientOffset();
       const targetTemperatureF = Math.min(MAX_TARGET_F, power.onTemperature + offsetF);
@@ -47,7 +47,6 @@ export const schedulePowerOn = (settingsData: Settings, side: Side, day: DayOfWe
         }
       });
       recordAppliedOffset(side, surfaceOn ? null : offsetF);
-      if (surfaceOn) recordSurfaceSetpoint(side, power.onTemperature);
       logComfortEvent('power_on', { side, scheduledF: power.onTemperature, offsetF, appliedF: targetTemperatureF, roomF });
       serverStatus.status.powerSchedule.status = 'healthy';
       serverStatus.status.powerSchedule.message = '';
@@ -121,7 +120,6 @@ export const schedulePowerOffAndSleepAnalysis = (settingsData: Settings, side: S
         }
       });
       recordAppliedOffset(side, null);
-      recordSurfaceSetpoint(side, null);
       logComfortEvent('power_off', { side });
       serverStatus.status.powerSchedule.status = 'healthy';
       serverStatus.status.powerSchedule.message = '';

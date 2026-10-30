@@ -11,6 +11,7 @@ import { WIFI_SIGNAL_STRENGTH } from './wifiSignalStrength.js';
 import { GestureSchema } from '../db/settingsSchema.js';
 import { getHeatActive } from './heatState.js';
 import { levelToF } from './temperatureLevels.js';
+import { bedControlEnabled, bedSide, bedTemperatureF, noteWaterTarget } from './bedControl.js';
 
 
 
@@ -174,6 +175,18 @@ export async function loadDeviceStatus(response: string, getGestures: boolean): 
     settings: decodeSettings(rawDeviceData.settings),
     wifiStrength: WIFI_SIGNAL_STRENGTH,
   };
+  // Bed control: the target is the bed setpoint and the current temperature is the measured bed
+  // (surface) temperature, so the app, HA and the side buttons all work in bed temperature
+  noteWaterTarget('left', Number(rawDeviceData.tgHeatLevelL));
+  noteWaterTarget('right', Number(rawDeviceData.tgHeatLevelR));
+  if (bedControlEnabled()) {
+    for (const side of ['left', 'right'] as const) {
+      const bed = bedSide(side);
+      const bedF = bedTemperatureF(side);
+      if (bed) deviceStatus[side].targetTemperatureF = bed.setpointF;
+      if (bedF !== null) deviceStatus[side].currentTemperatureF = Math.round(bedF);
+    }
+  }
   if (getGestures) {
     try {
       // @ts-expect-error - fields get populated below
