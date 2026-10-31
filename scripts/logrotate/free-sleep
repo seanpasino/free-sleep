@@ -1,0 +1,18 @@
+# free-sleep's Python logs (presence/vitals stream, sensor calibration, sleep analysis), installed as
+# /etc/logrotate.d/free-sleep. Their RotatingFileHandler never rotates (backupCount=0), so the stream
+# log grew to ~300 MB. Rotated here at 10 MB (under the handler's own 10 MB threshold, past which it
+# reopens the file on every line): copied, compressed and truncated in place, keeping 52 archives
+# (a year or more). free-sleep.log rotates itself.
+/persistent/free-sleep-data/logs/free-sleep-stream.log
+/persistent/free-sleep-data/logs/calibrate-sensor.log
+/persistent/free-sleep-data/logs/sleep-analyzer.log {
+    su dac dac
+    size 10M
+    rotate 52
+    copytruncate
+    compress
+    missingok
+    notifempty
+    dateext
+    dateformat -%Y%m%d-%s
+}
