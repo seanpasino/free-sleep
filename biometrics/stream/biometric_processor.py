@@ -120,6 +120,10 @@ class BiometricProcessor:
         # empty side's sensors (cap and piezo) enough to look like a second person
         self.away = False
         self.last_cap_score = 0.0  # Summed rise over the empty-bed baseline (raw counts)
+        # The server keeps presence in memory only, so a free-sleep restart forgets it until the
+        # next change; re-sending it now and then restores it (bed control learns only while present)
+        self.presence_resend_seconds = 60
+        self.last_presence_sent = 0.0
 
     def init_tracking(self):
         # Running metrics
@@ -144,6 +148,7 @@ class BiometricProcessor:
             retries: Number of attempts before giving up
             retry_delay: Seconds to wait between attempts
         """
+        self.last_presence_sent = time.monotonic()
         payload = {
             self.side: {
                 "present": is_present,
@@ -204,6 +209,9 @@ class BiometricProcessor:
                 self.present = False
                 self.reset()
                 self._update_presence_api(False)
+
+        if time.monotonic() - self.last_presence_sent >= self.presence_resend_seconds:
+            self._update_presence_api(self.present, retries=1)
 
     def _calculate_vitals(self, signal: np.ndarray, epoch: int):
         try:
