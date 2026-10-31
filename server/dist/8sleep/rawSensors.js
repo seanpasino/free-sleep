@@ -106,6 +106,7 @@ export const readLatestSensors = () => {
         out: centiCToF(side.out),
         cen: centiCToF(side.cen),
         in: centiCToF(side.in),
+        side: centiCToF(side.side),
     });
     return {
         ts: bedTemp.ts,
@@ -114,6 +115,7 @@ export const readLatestSensors = () => {
         waterF: frzTemp ? { left: centiCToF(frzTemp.left), right: centiCToF(frzTemp.right) } : null,
         waterTargetF: frzTherm ? { left: cToF(frzTherm.left.target), right: cToF(frzTherm.right.target) } : null,
         heatingEnabled: frzTherm ? { left: !!frzTherm.left.enabled, right: !!frzTherm.right.enabled } : null,
+        power: frzTherm ? { left: frzTherm.left.power, right: frzTherm.right.power } : null,
         surfaceF: { left: surface(bedTemp.left), right: surface(bedTemp.right) },
     };
 };

@@ -21,6 +21,7 @@ import { useVitalsRecords } from '@api/vitals.ts';
 import { useMovementRecords } from '@api/movement.ts';
 import MovementChart from '@components/MovementChart.tsx';
 import ErrorBoundary from '@components/ErrorBoundary.tsx';
+import BedTemperatureChart, { BedTemperatureMode } from '@components/BedTemperatureChart.tsx';
 
 
 const NoData = () => {
@@ -39,6 +40,12 @@ export default function SleepPage() {
   const [startTime, setStartTime] = useState(moment().subtract(7, 'days'));
   const [endTime, setEndTime] = useState(moment().add(2, 'day'));
   const [selectedSleepRecord, setSelectedSleepRecord] = useState<SleepRecord | undefined>(undefined);
+  // Unset until the user picks: the chart then shows tonight while the side is on
+  const [temperatureMode, setTemperatureMode] = useState<BedTemperatureMode | undefined>(undefined);
+  const selectNight = (record: SleepRecord | undefined) => {
+    setSelectedSleepRecord(record);
+    setTemperatureMode('night');
+  };
 
   // Fetch sleep records for the selected week
   const { data: sleepRecords, refetch } = useSleepRecords({
@@ -124,9 +131,17 @@ export default function SleepPage() {
           height={ 300 }
           sleepRecords={ sleepRecords }
           selectedSleepRecord={ selectedSleepRecord }
-          setSelectedSleepRecord={ setSelectedSleepRecord }
+          setSelectedSleepRecord={ selectNight }
         />
         <Box sx={ { 'width': width } }>
+          <ErrorBoundary componentName="Bed temperature chart">
+            <BedTemperatureChart
+              side={ side }
+              sleepRecord={ selectedSleepRecord }
+              mode={ temperatureMode }
+              setMode={ setTemperatureMode }
+            />
+          </ErrorBoundary>
           {
             selectedSleepRecord &&
             (

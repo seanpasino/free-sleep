@@ -48,3 +48,33 @@ model movement {
 }
 
 
+
+// One row a minute (jobs/bedHistory.ts), kept 30 days. °F; bed = the bed temperature the app shows.
+model bed_temperatures {
+  id                 Int      @id @default(autoincrement())
+  timestamp          Int      @unique // Minute start (Unix timestamp)
+  room               Float?
+  humidity           Float?
+  left_bed           Float?
+  left_out           Float?
+  left_cen           Float?
+  left_in            Float?
+  left_side          Float?
+  left_water         Float?
+  left_water_target  Float?
+  left_setpoint      Float? // Bed setpoint while bed control holds the side
+  left_power         Float? // Hub output, negative while cooling
+  left_on            Boolean?
+  left_present       Boolean?
+  right_bed          Float?
+  right_out          Float?
+  right_cen          Float?
+  right_in           Float?
+  right_side         Float?
+  right_water        Float?
+  right_water_target Float?
+  right_setpoint     Float?
+  right_power        Float?
+  right_on           Boolean?
+  right_present      Boolean?
+}

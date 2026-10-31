@@ -81,6 +81,7 @@ export const noteWaterTarget = (side, level) => {
     waterTarget[side] = { level, f: levelToF(level) };
 };
 export const waterTargetLevel = (side) => waterTarget[side]?.level ?? null;
+export const bedSetpointF = (side) => readState()[side]?.setpointF ?? null;
 // A side's setpoint and offset. The first time (bed control just switched on) it is seeded from the
 // current bed temperature, with the offset that keeps the water where it is, so nothing moves.
 export const bedSide = (side) => {

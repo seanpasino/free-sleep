@@ -13,6 +13,9 @@ import logger from '../logger.js';
 import { fToLevel, levelToF, MAX_TARGET_F, MIN_TARGET_F } from '../8sleep/temperatureLevels.js';
 import { executeFunction } from '../8sleep/deviceApi.js';
 import { bedControlEnabled, correctBed, noteWaterTarget, sampleSurface, waterTargetLevel } from '../8sleep/bedControl.js';
+import { DeviceStatus } from '../routes/deviceStatus/deviceStatusSchema.js';
+import { isPresent } from '../routes/metrics/presence.js';
+import { recordBedTemperatures } from './bedHistory.js';
 
 const COMFORT_LOG = '/persistent/free-sleep-data/comfort-log.jsonl';
 // Outside lowdb/ on purpose: writes there make the job scheduler look for changes
@@ -187,18 +190,15 @@ const recheck = async () => {
 
 // Bed control: each minute, for each side that is on (and not in away mode), nudge the water so the
 // bed temperature holds its setpoint. A side whose partner is in away mode drives both sides' water,
-// as updateDeviceStatus does.
-const bedControlTick = async (sensors: SensorSnapshot | null) => {
+// as updateDeviceStatus does. Only while someone is in bed: an empty bed runs ~3°F cooler than an
+// occupied one at the same water, so learning from it undoes the offset just before bedtime.
+const bedControlTick = async (sensors: SensorSnapshot | null, status: DeviceStatus | null) => {
   try {
-    await comfortDB.read();
-    sampleSurface(sensors);
-    if (!bedControlEnabled()) return;
+    if (!bedControlEnabled() || !status) return;
     await settingsDB.read();
-    const franken = await connectFranken();
-    const status = await franken.getDeviceStatus(false);
     const bothSides = settingsDB.data.left.awayMode || settingsDB.data.right.awayMode;
     for (const side of ['left', 'right'] as const) {
-      if (settingsDB.data[side].awayMode || !status[side].isOn) continue;
+      if (settingsDB.data[side].awayMode || !status[side].isOn || !isPresent(side)) continue;
       const next = correctBed(side);
       if (!next) continue;
       const level = fToLevel(next.waterF);
@@ -218,6 +218,21 @@ const bedControlTick = async (sensors: SensorSnapshot | null) => {
   }
 };
 
+// Bed control and the bed temperature history share one device status read a minute
+const minuteTick = async (sensors: SensorSnapshot | null) => {
+  let status: DeviceStatus | null = null;
+  try {
+    await comfortDB.read();
+    sampleSurface(sensors);
+    const franken = await connectFranken();
+    status = await franken.getDeviceStatus(false);
+  } catch (error) {
+    logger.error(error);
+  }
+  await bedControlTick(sensors, status);
+  await recordBedTemperatures(sensors, status);
+};
+
 // Runs 30s into every minute, after any schedule job due on that minute has finished;
 // realigns each time so no minute is skipped
 const everyMinute = (callback: () => void) => {
@@ -235,7 +250,7 @@ export const startComfortMonitoring = () => {
   everyMinute(() => {
     const sensors = latestSensors();
     sampleRoom(sensors);
-    void bedControlTick(sensors);
+    void minuteTick(sensors);
     const minute = new Date().getMinutes();
     if (minute % SNAPSHOT_EVERY_MINUTES === 0 && (sensors?.heatingEnabled?.left || sensors?.heatingEnabled?.right)) {
       logComfortEvent('snapshot', { roomMedianF: medianRoomF() }, sensors);

@@ -12,7 +12,9 @@ const DATA_KEY = Buffer.from([0x64, 0x64, 0x61, 0x74, 0x61]); // "data"
 const WANTED_TYPES = ['bedTemp', 'frzTemp', 'frzTherm'];
 
 type Sides<T> = { left: T; right: T };
-type SurfaceTemps = { out: number; cen: number; in: number };
+// out = outer edge, cen = middle of the side, in = toward the middle of the bed, side = a fourth
+// probe whose spot is undocumented (on an occupied side it tracks cen)
+type SurfaceTemps = { out: number; cen: number; in: number; side: number };
 
 export type SensorSnapshot = {
   ts: number;
@@ -22,6 +24,8 @@ export type SensorSnapshot = {
   waterF: Sides<number> | null;
   waterTargetF: Sides<number> | null;
   heatingEnabled: Sides<boolean> | null;
+  // Hub output per side, negative while cooling
+  power: Sides<number> | null;
   surfaceF: Sides<SurfaceTemps> | null;
 };
 
@@ -119,6 +123,7 @@ export const readLatestSensors = (): SensorSnapshot | null => {
     out: centiCToF(side.out),
     cen: centiCToF(side.cen),
     in: centiCToF(side.in),
+    side: centiCToF(side.side),
   });
 
   return {
@@ -128,6 +133,7 @@ export const readLatestSensors = (): SensorSnapshot | null => {
     waterF: frzTemp ? { left: centiCToF(frzTemp.left), right: centiCToF(frzTemp.right) } : null,
     waterTargetF: frzTherm ? { left: cToF(frzTherm.left.target), right: cToF(frzTherm.right.target) } : null,
     heatingEnabled: frzTherm ? { left: !!frzTherm.left.enabled, right: !!frzTherm.right.enabled } : null,
+    power: frzTherm ? { left: frzTherm.left.power, right: frzTherm.right.power } : null,
     surfaceF: { left: surface(bedTemp.left), right: surface(bedTemp.right) },
   };
 };

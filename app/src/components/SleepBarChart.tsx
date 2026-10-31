@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import { useRef, useEffect } from 'react';
 import * as d3 from 'd3';
 import moment from 'moment-timezone';
 import { useTheme, Theme } from '@mui/material/styles';
@@ -11,7 +11,7 @@ interface SleepBarChartProps {
   height?: number;
   sleepRecords?: SleepRecord[];
   selectedSleepRecord?: SleepRecord;
-  setSelectedSleepRecord: React.Dispatch<React.SetStateAction<SleepRecord | undefined>>;
+  setSelectedSleepRecord: (sleepRecord: SleepRecord | undefined) => void;
 }
 
 interface AxisProps {
