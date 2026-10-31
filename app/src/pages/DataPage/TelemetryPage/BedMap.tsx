@@ -3,7 +3,7 @@ import moment from 'moment-timezone';
 import { Box, Tooltip, Typography } from '@mui/material';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import { Telemetry } from '@api/telemetry.ts';
-import { formatTemp, temperatureColor } from './parts.tsx';
+import { formatTemp, SETPOINT_SCALE_F, setpointColor, temperatureColor } from './parts.tsx';
 import { COLORS } from '../../../theme.ts';
 
 type Side = 'left' | 'right';
@@ -16,9 +16,16 @@ const ZONES: Record<Side, Zone[]> = { left: ['out', 'cen', 'in'], right: ['in', 
 const FULL_LOAD = 2000;
 const VITALS_FRESH_MS = 10 * 60_000;
 
-const ZoneTile = ({ zone, tempF, cap, baseline, celsius }: {
-  zone: Zone; tempF: number | null; cap: number | null; baseline: number | null; celsius: boolean;
+// The bed setpoint a side's tiles are colored against; null (off or away) uses the fixed scale
+const activeSetpoint = (side: Side, telemetry: Telemetry) => {
+  const control = telemetry.controls.sides[side];
+  return control.isOn && !control.awayMode ? control.setpointF : null;
+};
+
+const ZoneTile = ({ zone, tempF, cap, baseline, setpointF, celsius }: {
+  zone: Zone; tempF: number | null; cap: number | null; baseline: number | null; setpointF: number | null; celsius: boolean;
 }) => {
+  const tint = (alpha: number) => (setpointF === null ? temperatureColor(tempF, alpha) : setpointColor(tempF, setpointF, alpha));
   const rise = cap !== null && baseline !== null ? cap - baseline : null;
   const load = rise === null ? 0 : Math.max(0, Math.min(1, rise / FULL_LOAD));
   return (
@@ -31,7 +38,7 @@ const ZoneTile = ({ zone, tempF, cap, baseline, celsius }: {
         sx={ {
           flex: 1, minWidth: 0, height: 128, borderRadius: '12px', px: 0.5, py: 1,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between',
-          bgcolor: temperatureColor(tempF, 0.2), border: `1px solid ${temperatureColor(tempF, 0.45)}`,
+          bgcolor: tint(0.45), border: `1px solid ${tint(0.75)}`,
           transition: 'background-color 800ms ease, border-color 800ms ease',
         } }
       >
@@ -52,10 +59,20 @@ const Half = ({ side, telemetry, celsius }: { side: Side; telemetry: Telemetry; 
   const control = telemetry.controls.sides[side];
   const vitals = cover.vitals && Date.now() - Date.parse(cover.vitals.at) < VITALS_FRESH_MS ? cover.vitals : null;
   const present = cover.presence.present;
+  const occupied = present && !control.awayMode;
+  const setpointF = activeSetpoint(side, telemetry);
   return (
     <Box sx={ { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 } }>
-      { /* Pillow at the head of the bed */ }
-      <Box sx={ { height: 10, mx: 2, borderRadius: '6px', bgcolor: COLORS.raised, border: `1px solid ${COLORS.border}` } }/>
+      { /* Pillow at the head of the bed, lit while the side is occupied */ }
+      <Box
+        sx={ {
+          height: 10, mx: 2, borderRadius: '6px',
+          bgcolor: occupied ? 'rgba(61, 217, 179, 0.45)' : COLORS.raised,
+          border: `1px solid ${occupied ? COLORS.ok : COLORS.border}`,
+          boxShadow: occupied ? '0 0 10px rgba(61, 217, 179, 0.45)' : 'none',
+          transition: 'background-color 400ms ease, border-color 400ms ease, box-shadow 400ms ease',
+        } }
+      />
       <Box sx={ { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', px: 0.25 } }>
         <Typography sx={ { fontSize: 13, fontWeight: 600 } }>{ side === 'left' ? 'Left' : 'Right' }</Typography>
         <Typography sx={ { fontSize: 12, color: COLORS.textTertiary, fontVariantNumeric: 'tabular-nums' } }>
@@ -70,6 +87,7 @@ const Half = ({ side, telemetry, celsius }: { side: Side; telemetry: Telemetry; 
             tempF={ cover.probes[zone] }
             cap={ cover.capacitance[zone] }
             baseline={ cover.capacitance.baseline?.[zone] ?? null }
+            setpointF={ setpointF }
             celsius={ celsius }
           />
         )) }
@@ -107,9 +125,20 @@ const Half = ({ side, telemetry, celsius }: { side: Side; telemetry: Telemetry; 
   );
 };
 
-// Top-down view of the cover: each side's three surface probes as tiles, colored by temperature,
-// with a bar for how much load the capacitance sensor under that zone sees
+const ScaleLegend = ({ low, high, colors, caption }: { low: string; high: string; colors: string[]; caption: string }) => (
+  <Box sx={ { display: 'flex', alignItems: 'center', gap: 1 } }>
+    <Typography sx={ { fontSize: 11, color: COLORS.textTertiary } }>{ low }</Typography>
+    <Box sx={ { flex: 1, height: 4, borderRadius: 2, background: `linear-gradient(90deg, ${colors.join(', ')})` } }/>
+    <Typography sx={ { fontSize: 11, color: COLORS.textTertiary } }>{ high }</Typography>
+    <Typography sx={ { fontSize: 11, color: COLORS.textTertiary, width: 112, textAlign: 'right' } }>{ caption }</Typography>
+  </Box>
+);
+
+// Top-down view of the cover: each side's three surface probes as tiles, colored by distance from
+// that side's setpoint (a fixed scale when it's off or away), with a bar for how much load the capacitance sensor under that zone sees
 export default function BedMap({ telemetry, celsius }: { telemetry: Telemetry; celsius: boolean }) {
+  const setpoints = (['left', 'right'] as Side[]).map((side) => activeSetpoint(side, telemetry));
+  const delta = celsius ? Math.round(SETPOINT_SCALE_F * 5 / 9) : SETPOINT_SCALE_F;
   return (
     <Box>
       <Box
@@ -122,17 +151,27 @@ export default function BedMap({ telemetry, celsius }: { telemetry: Telemetry; c
         <Box sx={ { width: '1px', bgcolor: COLORS.border, my: 1 } }/>
         <Half side="right" telemetry={ telemetry } celsius={ celsius }/>
       </Box>
-      <Box sx={ { display: 'flex', alignItems: 'center', gap: 1, mt: 1.25 } }>
-        <Typography sx={ { fontSize: 11, color: COLORS.textTertiary } }>{ formatTemp(68, celsius, 0) }</Typography>
-        <Box
-          sx={ {
-            flex: 1, height: 4, borderRadius: 2,
-            background: `linear-gradient(90deg, ${temperatureColor(68)}, ${temperatureColor(76)}, ${temperatureColor(84)})`,
-          } }
-        />
-        <Typography sx={ { fontSize: 11, color: COLORS.textTertiary } }>{ formatTemp(84, celsius, 0) }</Typography>
-        <Box sx={ { width: 16, height: 4, borderRadius: 2, bgcolor: COLORS.ok, ml: 1 } }/>
-        <Typography sx={ { fontSize: 11, color: COLORS.textTertiary } }>Load</Typography>
+      <Box sx={ { display: 'flex', flexDirection: 'column', gap: 0.5, mt: 1.25 } }>
+        { setpoints.some((s) => s !== null) && (
+          <ScaleLegend
+            low={ `−${delta}°` }
+            high={ `+${delta}°` }
+            colors={ [temperatureColor(68), temperatureColor(76), temperatureColor(84)] }
+            caption="from target"
+          />
+        ) }
+        { setpoints.some((s) => s === null) && (
+          <ScaleLegend
+            low={ formatTemp(68, celsius, 0) }
+            high={ formatTemp(84, celsius, 0) }
+            colors={ [temperatureColor(68), temperatureColor(76), temperatureColor(84)] }
+            caption="off or away side"
+          />
+        ) }
+        <Box sx={ { display: 'flex', alignItems: 'center', gap: 1 } }>
+          <Box sx={ { width: 16, height: 4, borderRadius: 2, bgcolor: COLORS.ok } }/>
+          <Typography sx={ { fontSize: 11, color: COLORS.textTertiary } }>Load</Typography>
+        </Box>
       </Box>
     </Box>
   );

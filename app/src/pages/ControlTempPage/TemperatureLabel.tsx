@@ -2,46 +2,54 @@ import { Box, CircularProgress, Typography } from '@mui/material';
 
 import { COLORS } from '../../theme.ts';
 import { formatDegrees, formatTemperature } from '@lib/temperatureConversions.ts';
+import { BedPhase } from '@lib/bedPhase.ts';
 
 
 type TemperatureLabelProps = {
   isOn: boolean;
-  isActive?: boolean | null;
   isInAwayMode: boolean;
   // What the dial shows: the user's pending pick, else the Pod's target
   targetTemperatureF: number;
   // What the Pod currently reports as its target
   currentTargetTemp: number;
   currentTemperatureF: number;
+  phase: BedPhase;
+  // Water temperature, shown with bed control so the dial's number isn't mistaken for it
+  waterF?: number | null;
   displayCelsius: boolean;
   isSending: boolean;
   powerOnTime?: string;
 };
 
 
-const getTitle = (targetTemperatureF: number, currentTargetTemp: number, currentTemperatureF: number, isActive?: boolean | null) => {
+const PHASE_TITLE: Record<BedPhase, string> = {
+  starting: 'Starting…',
+  ready: 'Ready for you',
+  bodyHeat: 'Warming up with you',
+  warming: 'Warming to',
+  cooling: 'Cooling to',
+  holding: 'Holding at',
+};
+
+const getTitle = (targetTemperatureF: number, currentTargetTemp: number, currentTemperatureF: number, phase: BedPhase) => {
   // User is mid-change
   if (targetTemperatureF !== currentTargetTemp) {
     if (targetTemperatureF < currentTemperatureF) return 'Cool to';
     if (targetTemperatureF > currentTemperatureF) return 'Warm to';
     return 'Hold at';
   }
-  // Commanded on, but the pump/TEC hasn't physically engaged yet (the firmware
-  // defers actuation for a couple minutes — anti-short-cycle protection)
-  if (isActive === false) return 'Starting…';
-  if (currentTemperatureF < currentTargetTemp) return 'Warming to';
-  if (currentTemperatureF > currentTargetTemp) return 'Cooling to';
-  return 'Holding at';
+  return PHASE_TITLE[phase];
 };
 
 
 export default function TemperatureLabel({
   isOn,
-  isActive,
   isInAwayMode,
   targetTemperatureF,
   currentTargetTemp,
   currentTemperatureF,
+  phase,
+  waterF,
   displayCelsius,
   isSending,
   powerOnTime,
@@ -71,7 +79,7 @@ export default function TemperatureLabel({
   return (
     <>
       <Typography sx={ { fontSize: 14, fontWeight: 500, color: COLORS.textSecondary } }>
-        { getTitle(targetTemperatureF, currentTargetTemp, currentTemperatureF, isActive) }
+        { getTitle(targetTemperatureF, currentTargetTemp, currentTemperatureF, phase) }
       </Typography>
       <Typography
         component="span"
@@ -80,7 +88,9 @@ export default function TemperatureLabel({
         { formatDegrees(targetTemperatureF, displayCelsius) }
       </Typography>
       <Typography sx={ { fontSize: 14, color: COLORS.textSecondary } }>
-        Now { formatTemperature(currentTemperatureF, displayCelsius) }
+        { waterF === undefined || waterF === null
+          ? `Now ${formatTemperature(currentTemperatureF, displayCelsius)}`
+          : `Bed ${formatTemperature(currentTemperatureF, displayCelsius)} · Water ${formatTemperature(Math.round(waterF), displayCelsius)}` }
       </Typography>
       <Box sx={ { height: 20, mt: 0.5, display: 'flex', alignItems: 'center', gap: 0.75, color: COLORS.textTertiary, fontSize: 12 } }>
         { isSending && (

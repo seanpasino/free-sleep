@@ -5,6 +5,8 @@ import TemperatureButtons from './TemperatureButtons.tsx';
 import TemperatureDial from './TemperatureDial.tsx';
 import TemperatureLabel from './TemperatureLabel.tsx';
 import { formatTemperature, getDialColor, MAX_TEMP_F, MIN_TEMP_F } from '@lib/temperatureConversions.ts';
+import { getBedPhase, isAwaitingBody } from '@lib/bedPhase.ts';
+import { useBedSnapshots } from '@api/telemetry.ts';
 import { sendPendingTarget } from './targetTemperature.ts';
 import { useAppStore } from '@state/appStore';
 import { useControlTempStore } from './controlTempStore.tsx';
@@ -39,6 +41,9 @@ export default function TemperatureControl({
   // What the dial shows: the user's not-yet-confirmed pick, else what the Pod reports
   const targetTemperatureF = pending?.temperatureF ?? currentTargetTemp;
   const step = useTargetStepper(side, targetTemperatureF);
+  const bed = useBedSnapshots()[side];
+  const phase = getBedPhase(currentTargetTemp, currentTemperatureF, isActive, bed);
+  const awaitingBody = isAwaitingBody(phase) && targetTemperatureF === currentTargetTemp;
 
   return (
     <TemperatureDial
@@ -47,7 +52,8 @@ export default function TemperatureControl({
       min={ MIN_TEMP_F }
       max={ MAX_TEMP_F }
       disabled={ disabled }
-      color={ getDialColor(targetTemperatureF, currentTemperatureF) }
+      color={ awaitingBody ? getDialColor(targetTemperatureF, targetTemperatureF) : getDialColor(targetTemperatureF, currentTemperatureF) }
+      awaitingBody={ awaitingBody }
       ariaValueText={
         `${formatTemperature(targetTemperatureF, displayCelsius)}, currently ${formatTemperature(currentTemperatureF, displayCelsius)}`
       }
@@ -71,11 +77,12 @@ export default function TemperatureControl({
       >
         <TemperatureLabel
           isOn={ isOn }
-          isActive={ isActive }
           isInAwayMode={ isInAwayMode }
           targetTemperatureF={ targetTemperatureF }
           currentTargetTemp={ currentTargetTemp }
           currentTemperatureF={ currentTemperatureF }
+          phase={ phase }
+          waterF={ bed?.waterF }
           displayCelsius={ displayCelsius }
           isSending={ !!pending?.sentAt }
           powerOnTime={ powerOnTime }

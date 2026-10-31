@@ -5,6 +5,8 @@ import { Side, useAppStore } from '@state/appStore.tsx';
 import { formatTemperature, getDialColor } from '@lib/temperatureConversions.ts';
 import { formatClock, getCurrentNight } from '@lib/night.ts';
 import { useControlTempStore } from '../pages/ControlTempPage/controlTempStore.tsx';
+import { getBedPhase, isAwaitingBody } from '@lib/bedPhase.ts';
+import { useBedSnapshots } from '@api/telemetry.ts';
 import { useDeviceStatus } from '@api/deviceStatus.ts';
 import { useSchedules } from '@api/schedules.ts';
 import { useSettings } from '@api/settings.ts';
@@ -15,6 +17,7 @@ export default function SideCards() {
   const { data: deviceStatus } = useDeviceStatus();
   const { data: settings } = useSettings();
   const { data: schedules } = useSchedules();
+  const bedSnapshots = useBedSnapshots();
   const pendingTarget = useControlTempStore(state => state.pendingTarget);
   const isCelsius = settings?.temperatureFormat === 'celsius';
   const night = getCurrentNight(settings?.timeZone);
@@ -34,13 +37,20 @@ export default function SideCards() {
     }
     const target = pendingTarget[side]?.temperatureF ?? status.targetTemperatureF;
     const current = status.currentTemperatureF;
-    const now = `now ${formatTemperature(current, isCelsius).replace(/[FC]$/, '')}`;
-    let detail: string;
-    if (status.isActive === false) detail = `Starting · ${now}`;
-    else if (current > target) detail = `Cooling · ${now}`;
-    else if (current < target) detail = `Warming · ${now}`;
-    else detail = 'At temperature';
-    return { value: formatTemperature(target, isCelsius), valueColor: getDialColor(target, current), detail };
+    const bed = bedSnapshots[side];
+    const reading = formatTemperature(current, isCelsius).replace(/[FC]$/, '');
+    const now = bed ? `bed ${reading}` : `now ${reading}`;
+    const phase = getBedPhase(target, current, status.isActive, bed);
+    const detail = {
+      starting: `Starting · ${now}`,
+      ready: `Ready · ${now}`,
+      bodyHeat: `Warming up · ${now}`,
+      warming: `Warming · ${now}`,
+      cooling: `Cooling · ${now}`,
+      holding: 'At temperature',
+    }[phase];
+    const valueColor = isAwaitingBody(phase) ? getDialColor(target, target) : getDialColor(target, current);
+    return { value: formatTemperature(target, isCelsius), valueColor, detail };
   };
 
   return (

@@ -36,6 +36,12 @@ export const temperatureColor = (f: number | null, alpha = 1) => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
+// Blue below a setpoint, grey on it, orange above; full color this many °F away
+export const SETPOINT_SCALE_F = 4;
+export const setpointColor = (f: number | null, setpointF: number, alpha = 1) => (
+  temperatureColor(f === null ? null : 76 + (f - setpointF) * 8 / SETPOINT_SCALE_F, alpha)
+);
+
 export const Section = ({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) => (
   <Card sx={ { p: 2 } }>
     <Box sx={ { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1, mb: 1.5 } }>

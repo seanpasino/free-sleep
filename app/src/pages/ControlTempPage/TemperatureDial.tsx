@@ -20,6 +20,12 @@ const pointAt = (fraction: number) => {
 const ARC_START = pointAt(0);
 const ARC_END = pointAt(1);
 const ARC_PATH = `M${ARC_START.x} ${ARC_START.y} A${RADIUS} ${RADIUS} 0 1 1 ${ARC_END.x} ${ARC_END.y}`;
+const arcBetween = (from: number, to: number) => {
+  const a = pointAt(from);
+  const b = pointAt(to);
+  const large = (to - from) * SWEEP_DEG > 180 ? 1 : 0;
+  return `M${a.x} ${a.y} A${RADIUS} ${RADIUS} 0 ${large} 1 ${b.x} ${b.y}`;
+};
 
 type TemperatureDialProps = {
   value: number;
@@ -29,6 +35,9 @@ type TemperatureDialProps = {
   // Off / away: the ring is shown empty and can't be dragged
   disabled: boolean;
   color: string;
+  // The bed is short of the target until someone's body heat makes up the rest: solid up to the bed
+  // reading, dotted from there to a hollow handle at the target
+  awaitingBody?: boolean;
   ariaValueText: string;
   onChange: (value: number) => void;
   onChangeEnd: () => void;
@@ -44,6 +53,7 @@ export default function TemperatureDial({
   max,
   disabled,
   color,
+  awaitingBody = false,
   ariaValueText,
   onChange,
   onChangeEnd,
@@ -102,7 +112,9 @@ export default function TemperatureDial({
 
   const valueFraction = fractionOf(value);
   const handle = pointAt(valueFraction);
-  const marker = pointAt(fractionOf(current));
+  const currentFraction = fractionOf(current);
+  const marker = pointAt(currentFraction);
+  const solidTo = awaitingBody ? Math.min(currentFraction, valueFraction) : valueFraction;
 
   return (
     <Box
@@ -163,10 +175,27 @@ export default function TemperatureDial({
               stroke={ color }
               strokeWidth={ TRACK_WIDTH }
               strokeLinecap="round"
-              strokeDasharray={ `${valueFraction * ARC_LENGTH} ${ARC_LENGTH + TRACK_WIDTH}` }
+              strokeDasharray={ `${solidTo * ARC_LENGTH} ${ARC_LENGTH + TRACK_WIDTH}` }
             />
+            { awaitingBody && solidTo < valueFraction && (
+              <path
+                d={ arcBetween(solidTo, valueFraction) }
+                fill="none"
+                stroke={ color }
+                strokeWidth={ 5 }
+                strokeLinecap="round"
+                strokeDasharray="0.1 11"
+              />
+            ) }
             <circle cx={ marker.x } cy={ marker.y } r={ 5 } fill={ COLORS.ground } stroke={ COLORS.text } strokeWidth={ 2 }/>
-            <circle cx={ handle.x } cy={ handle.y } r={ 13 } fill={ COLORS.text } stroke={ COLORS.ground } strokeWidth={ 3 }/>
+            <circle
+              cx={ handle.x }
+              cy={ handle.y }
+              r={ 13 }
+              fill={ awaitingBody ? COLORS.ground : COLORS.text }
+              stroke={ awaitingBody ? COLORS.text : COLORS.ground }
+              strokeWidth={ 3 }
+            />
           </>
         ) }
       </svg>
