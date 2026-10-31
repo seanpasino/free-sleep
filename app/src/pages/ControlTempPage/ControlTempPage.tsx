@@ -15,6 +15,7 @@ import PrimingNotification from './PrimingNotification.tsx';
 import SideCards from '@components/SideCards.tsx';
 import TonightCard from '@components/TonightCard.tsx';
 import TemperatureControl from './TemperatureControl.tsx';
+import TonightOverrides from './TonightOverrides.tsx';
 import WaterNotification from './WaterNotification.tsx';
 import { COLORS } from '../../theme.ts';
 import { formatClock, getCurrentNight } from '@lib/night.ts';
@@ -114,6 +115,11 @@ export default function ControlTempPage() {
             </ErrorBoundary>
           </Box>
           { !isInAwayMode && <PowerButton isOn={ isOn }/> }
+          { !isInAwayMode && (
+            <ErrorBoundary componentName="Tonight overrides">
+              <TonightOverrides isOn={ isOn }/>
+            </ErrorBoundary>
+          ) }
           { !isInAwayMode && (
             <ErrorBoundary componentName="Tonight card">
               <TonightCard
