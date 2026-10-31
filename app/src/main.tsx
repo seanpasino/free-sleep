@@ -22,6 +22,7 @@ import SchedulePage from './pages/SchedulePage/SchedulePage.tsx';
 import ErrorBoundary from './components/ErrorBoundary.tsx';
 import { GlobalStyles } from '@mui/material';
 import SleepPage from './pages/DataPage/SleepPage/SleepPage.tsx';
+import TelemetryPage from './pages/DataPage/TelemetryPage/TelemetryPage.tsx';
 import DataPage from './pages/DataPage/DataPage.tsx';
 import VitalsPage from './pages/DataPage/VitalsPage/VitalsPage.tsx';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -70,6 +71,7 @@ const App = () => {
                   <Route path="data" element={ <DataPage /> }>
                     <Route path="sleep" element={ <SleepPage/> }/>
                     <Route path="logs" element={ <LogsPage/> }/>
+                    <Route path="telemetry" element={ <TelemetryPage/> }/>
                     <Route path="vitals" element={ <VitalsPage/> }/>
                   </Route>
 

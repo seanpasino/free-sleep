@@ -24,7 +24,11 @@ const presenceData = {
         lastUpdatedAt: moment.tz(settingsDB.data.timeZone).format(),
     },
 };
+// When each side last changed between present and absent (the stream re-sends unchanged states every
+// minute, which only moves lastUpdatedAt); null until the first change after a restart
+const changedAt = { left: null, right: null };
 export const isPresent = (side) => presenceData[side].present;
+export const getPresence = (side) => ({ present: presenceData[side].present, changedAt: changedAt[side] });
 /**
  * POST /presence
  * Update presence data for one or both sides
@@ -52,11 +56,15 @@ router.post('/presence', async (req, res) => {
         const currentTime = moment.tz(settingsDB.data.timeZone).format();
         // Update left side if provided
         if (body.left) {
+            if (body.left.present !== presenceData.left.present)
+                changedAt.left = currentTime;
             presenceData.left.present = body.left.present;
             presenceData.left.lastUpdatedAt = currentTime;
         }
         // Update right side if provided
         if (body.right) {
+            if (body.right.present !== presenceData.right.present)
+                changedAt.right = currentTime;
             presenceData.right.present = body.right.present;
             presenceData.right.lastUpdatedAt = currentTime;
         }

@@ -23,6 +23,8 @@ const REGEX = /DBG:(\d+).*\[TTC\] processing \[button\] side (left|right) \{ but
 const MIDDLE_HELD_REGEX = /\[buttons\] middle button held for (\d+)ms/;
 // Coalesced middle-button event (carries the side, but never a duration).
 const MIDDLE_PROC_REGEX = /DBG:(\d+).*\[TTC\] processing \[button\] side (left|right) \{ button: middle, type: short/;
+// The last press seen per side (for the Telemetry page)
+export const lastButtonPress = { left: null, right: null };
 export class ButtonMonitor {
     isRunning = false;
     lastPollTime = '';
@@ -85,6 +87,7 @@ export class ButtonMonitor {
                     const heldMs = this.lastMiddleHeldMs;
                     const fresh = Date.now() - this.lastMiddleHeldAt < 4000;
                     this.lastMiddleHeldMs = 0;
+                    lastButtonPress[side] = { button: 'middle', at: new Date().toISOString(), heldMs: fresh ? heldMs : undefined };
                     if (fresh && heldMs >= POWER_TOGGLE_HOLD_MS) {
                         logger.info(`ButtonMonitor: middle long-press (${heldMs}ms) on ${side}`);
                         void this.toggleSidePower(side);
@@ -103,6 +106,7 @@ export class ButtonMonitor {
                 this.seen.add(id);
                 const side = match[2];
                 const button = match[3];
+                lastButtonPress[side] = { button, at: new Date().toISOString() };
                 this.registerPress(button, side);
             }
             // Keep seen set from growing forever

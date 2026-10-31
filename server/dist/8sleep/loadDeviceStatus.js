@@ -27,11 +27,15 @@ const RawDeviceData = z.object({
     tripleTap: z.string().optional(),
     quadTap: z.string().optional(),
 });
+// The firmware's last DEVICE_STATUS reply, every key as it came (for the Telemetry page)
+let lastRawDeviceData = {};
+export const getLastRawDeviceData = () => lastRawDeviceData;
 // Reads & validates the raw response data from socket and converts it to an object
 const parseRawDeviceData = (response) => {
     const rawDeviceData = Object.fromEntries(response.split('\n').map(l => l.split(' = ')));
     try {
         RawDeviceData.parse(rawDeviceData);
+        lastRawDeviceData = rawDeviceData;
         return rawDeviceData;
     }
     catch (error) {

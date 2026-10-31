@@ -36,7 +36,12 @@ const presenceData: PresenceDataState = {
   },
 };
 
+// When each side last changed between present and absent (the stream re-sends unchanged states every
+// minute, which only moves lastUpdatedAt); null until the first change after a restart
+const changedAt: Record<'left' | 'right', string | null> = { left: null, right: null };
+
 export const isPresent = (side: 'left' | 'right') => presenceData[side].present;
+export const getPresence = (side: 'left' | 'right') => ({ present: presenceData[side].present, changedAt: changedAt[side] });
 
 /**
  * POST /presence
@@ -68,12 +73,14 @@ router.post('/presence', async (req: Request, res: Response) => {
 
     // Update left side if provided
     if (body.left) {
+      if (body.left.present !== presenceData.left.present) changedAt.left = currentTime;
       presenceData.left.present = body.left.present;
       presenceData.left.lastUpdatedAt = currentTime;
     }
 
     // Update right side if provided
     if (body.right) {
+      if (body.right.present !== presenceData.right.present) changedAt.right = currentTime;
       presenceData.right.present = body.right.present;
       presenceData.right.lastUpdatedAt = currentTime;
     }

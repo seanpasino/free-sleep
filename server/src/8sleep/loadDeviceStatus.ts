@@ -37,12 +37,17 @@ const RawDeviceData = z.object({
 
 type RawDeviceDataType = z.infer<typeof RawDeviceData>;
 
+// The firmware's last DEVICE_STATUS reply, every key as it came (for the Telemetry page)
+let lastRawDeviceData: Record<string, string> = {};
+export const getLastRawDeviceData = () => lastRawDeviceData;
+
 // Reads & validates the raw response data from socket and converts it to an object
 const parseRawDeviceData = (response: string): RawDeviceDataType => {
   const rawDeviceData = Object.fromEntries(response.split('\n').map(l => l.split(' = ')));
 
   try {
     RawDeviceData.parse(rawDeviceData);
+    lastRawDeviceData = rawDeviceData;
     return rawDeviceData;
   } catch (error) {
     logger.error(error);

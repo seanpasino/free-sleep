@@ -29,6 +29,10 @@ const MIDDLE_HELD_REGEX = /\[buttons\] middle button held for (\d+)ms/;
 // Coalesced middle-button event (carries the side, but never a duration).
 const MIDDLE_PROC_REGEX = /DBG:(\d+).*\[TTC\] processing \[button\] side (left|right) \{ button: middle, type: short/;
 
+export type ButtonPress = { button: 'top' | 'middle' | 'bottom'; at: string; heldMs?: number };
+// The last press seen per side (for the Telemetry page)
+export const lastButtonPress: Record<Side, ButtonPress | null> = { left: null, right: null };
+
 export class ButtonMonitor {
   private isRunning = false;
   private lastPollTime = '';
@@ -100,6 +104,7 @@ export class ButtonMonitor {
           const heldMs = this.lastMiddleHeldMs;
           const fresh = Date.now() - this.lastMiddleHeldAt < 4000;
           this.lastMiddleHeldMs = 0;
+          lastButtonPress[side] = { button: 'middle', at: new Date().toISOString(), heldMs: fresh ? heldMs : undefined };
           if (fresh && heldMs >= POWER_TOGGLE_HOLD_MS) {
             logger.info(`ButtonMonitor: middle long-press (${heldMs}ms) on ${side}`);
             void this.toggleSidePower(side);
@@ -118,6 +123,7 @@ export class ButtonMonitor {
 
         const side = match[2] as Side;
         const button = match[3] as 'top' | 'bottom';
+        lastButtonPress[side] = { button, at: new Date().toISOString() };
         this.registerPress(button, side);
       }
 

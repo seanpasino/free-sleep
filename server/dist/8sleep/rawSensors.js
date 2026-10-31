@@ -69,8 +69,9 @@ const recordData = (buffer, start) => {
         return null;
     return buffer.subarray(pos, pos + length);
 };
-const latestRecords = () => {
-    const latest = {};
+// Decodes only the newest complete record of each type (piezo records are large)
+const latestRecords = (wantedTypes = WANTED_TYPES) => {
+    const candidates = {};
     for (const filePath of newestRawFiles(2)) {
         const buffer = readTail(filePath);
         let index = buffer.indexOf(RECORD_MARKER);
@@ -78,21 +79,29 @@ const latestRecords = () => {
             const data = recordData(buffer, index);
             if (data) {
                 const head = data.subarray(0, 40).toString('latin1');
-                const type = WANTED_TYPES.find(t => head.includes(t));
-                if (type) {
-                    try {
-                        latest[type] = cbor.decodeFirstSync(data);
-                    }
-                    catch {
-                        // A record split across the tail boundary; the next one will do
-                    }
-                }
+                const type = wantedTypes.find(t => head.includes(t));
+                if (type)
+                    (candidates[type] ??= []).push(data);
             }
             index = buffer.indexOf(RECORD_MARKER, index + 1);
         }
     }
+    const latest = {};
+    for (const [type, records] of Object.entries(candidates)) {
+        for (let i = records.length - 1; i >= 0; i--) {
+            try {
+                latest[type] = cbor.decodeFirstSync(records[i]);
+                break;
+            }
+            catch {
+                // A record split across the tail boundary; try the one before
+            }
+        }
+    }
     return latest;
 };
+// The newest record of each type in the last two RAW files (for the Telemetry page)
+export const readLatestRecords = (types) => latestRecords(types);
 export const readLatestSensors = () => {
     const { bedTemp, frzTemp, frzTherm } = latestRecords();
     if (!bedTemp)
