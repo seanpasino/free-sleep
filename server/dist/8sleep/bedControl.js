@@ -21,12 +21,13 @@ const DEADBAND_F = 0.3;
 const MAX_OFFSET_F = 10;
 // Faster setpoint changes (comfortDB surfaceControl.boost): the water first moves by (1 + BOOST_GAIN)
 // times the change, holds for BOOST_HOLD_MS, then fades back to setpoint + offset over BOOST_FADE_MS.
-// The mattress takes 30-90 min to follow the water, so this gets a 1-2°F change felt in ~20 min.
-const BOOST_GAIN = 1;
-const BOOST_MAX_F = 4;
+// Measured 2026-10-31: the center probe follows the water with a time constant of about 23 min, so a
+// short, strong push gets there sooner with less overshoot than a long, gentle one.
+const BOOST_GAIN = 2;
+const BOOST_MAX_F = 6;
 const BOOST_MIN_CHANGE_F = 0.5;
-const BOOST_HOLD_MS = 15 * 60 * 1000;
-const BOOST_FADE_MS = 15 * 60 * 1000;
+const BOOST_HOLD_MS = 8 * 60 * 1000;
+const BOOST_FADE_MS = 10 * 60 * 1000;
 // Right after a change the gap between bed and setpoint is the mattress catching up, not a wrong
 // offset; learning from it winds the offset past where it settles
 const LEARN_PAUSE_MS = 45 * 60 * 1000;
