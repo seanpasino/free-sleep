@@ -15,6 +15,7 @@ const defaultData = {
     surfaceControl: {
         enabled: false,
         probe: 'cen',
+        boost: false,
     },
 };
 const file = new JSONFile(`${config.lowDbFolder}comfortDB.json`);

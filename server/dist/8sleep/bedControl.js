@@ -19,10 +19,22 @@ const GAIN_PER_MIN = 0.02;
 // Leave it alone this close to the setpoint (one firmware level is ~0.2-0.3°F)
 const DEADBAND_F = 0.3;
 const MAX_OFFSET_F = 10;
+// Faster setpoint changes (comfortDB surfaceControl.boost): the water first moves by (1 + BOOST_GAIN)
+// times the change, holds for BOOST_HOLD_MS, then fades back to setpoint + offset over BOOST_FADE_MS.
+// The mattress takes 30-90 min to follow the water, so this gets a 1-2°F change felt in ~20 min.
+const BOOST_GAIN = 1;
+const BOOST_MAX_F = 4;
+const BOOST_MIN_CHANGE_F = 0.5;
+const BOOST_HOLD_MS = 15 * 60 * 1000;
+const BOOST_FADE_MS = 15 * 60 * 1000;
+// Right after a change the gap between bed and setpoint is the mattress catching up, not a wrong
+// offset; learning from it winds the offset past where it settles
+const LEARN_PAUSE_MS = 45 * 60 * 1000;
 const samples = { left: [], right: [] };
 // Last water target the firmware reported, per side (noted by loadDeviceStatus)
 const waterTarget = {};
 export const bedControlEnabled = () => comfortDB.data.surfaceControl?.enabled === true;
+const boostEnabled = () => comfortDB.data.surfaceControl?.boost === true;
 const clampF = (f) => Math.min(MAX_TARGET_F, Math.max(MIN_TARGET_F, f));
 const probeValue = (zones) => {
     switch (comfortDB.data.surfaceControl?.probe) {
@@ -100,34 +112,67 @@ export const bedSide = (side) => {
     logger.info(`BedControl: ${side} bed setpoint seeded at ${setpointF}°F (bed ${bedF}°F, water ${water.f}°F)`);
     return seeded;
 };
-// New bed setpoint from the app, HA, a button or a schedule. Returns the water target to send:
-// it moves by the same amount as the setpoint.
-export const setBedSetpoint = (side, setpointF) => {
-    const offsetF = bedSide(side)?.offsetF ?? 0;
+// Extra water change still in effect from the last setpoint change
+const boostF = (bed, now = Date.now()) => {
+    if (!bed.boost)
+        return 0;
+    const age = now - bed.boost.at;
+    if (age < BOOST_HOLD_MS)
+        return bed.boost.extraF;
+    if (age < BOOST_HOLD_MS + BOOST_FADE_MS)
+        return bed.boost.extraF * (1 - (age - BOOST_HOLD_MS) / BOOST_FADE_MS);
+    return 0;
+};
+// The water target that holds a side's bed at its setpoint, boost included
+export const bedWaterF = (side) => {
+    const bed = bedSide(side);
+    return bed ? clampF(bed.setpointF + bed.offsetF + boostF(bed)) : null;
+};
+export const bedBoostF = (side) => {
+    const bed = readState()[side];
+    return bed ? Math.round(boostF(bed) * 100) / 100 : 0;
+};
+// New bed setpoint from the app, HA, a button or a schedule. Returns the water target to send: it
+// moves by the same amount as the setpoint, plus a boost when `change` (a side that is already on)
+// and boosting is enabled.
+export const setBedSetpoint = (side, setpointF, change = false) => {
+    const current = bedSide(side);
+    const offsetF = current?.offsetF ?? 0;
     const state = readState();
     const updated = { setpointF: clampF(setpointF), offsetF };
+    const deltaF = current ? updated.setpointF - current.setpointF : 0;
+    if (change && boostEnabled() && Math.abs(deltaF) >= BOOST_MIN_CHANGE_F) {
+        const extraF = Math.max(-BOOST_MAX_F, Math.min(BOOST_MAX_F, deltaF * BOOST_GAIN));
+        updated.boost = { extraF, at: Date.now() };
+        updated.learnAfter = Date.now() + LEARN_PAUSE_MS;
+        logger.info(`BedControl: ${side} setpoint ${current?.setpointF}°F -> ${updated.setpointF}°F, boosting water ${extraF > 0 ? '+' : ''}${extraF}°F`);
+    }
+    else if (current?.learnAfter && current.learnAfter > Date.now()) {
+        updated.learnAfter = current.learnAfter;
+    }
     state[side] = updated;
     writeState(state);
-    return clampF(updated.setpointF + offsetF);
+    return clampF(updated.setpointF + offsetF + boostF(updated));
 };
-// One minute of correction for a side that is on. Returns the water target to hold the bed at the
-// setpoint, or null to leave the water alone.
+// One minute of learning for a side that is on and occupied: nudges the offset so the measured bed
+// temperature holds the setpoint. Returns what it did, or null when it left the offset alone.
 export const correctBed = (side) => {
     const current = bedSide(side);
     const bedF = bedTemperatureF(side);
     if (!current || bedF === null)
         return null;
+    if (current.learnAfter && current.learnAfter > Date.now())
+        return null;
     const errorF = current.setpointF - bedF;
     if (Math.abs(errorF) < DEADBAND_F)
         return null;
     const offsetF = Math.max(-MAX_OFFSET_F, Math.min(MAX_OFFSET_F, current.offsetF + GAIN_PER_MIN * errorF));
-    const waterF = current.setpointF + offsetF;
     // At the Pod's range limit more offset does nothing, so don't let it pile up
-    if (waterF !== clampF(waterF))
+    if (current.setpointF + offsetF !== clampF(current.setpointF + offsetF))
         return null;
     const state = readState();
-    state[side] = { setpointF: current.setpointF, offsetF };
+    state[side] = { ...current, offsetF };
     writeState(state);
-    return { waterF, setpointF: current.setpointF, bedF, offsetF };
+    return { setpointF: current.setpointF, bedF, offsetF };
 };
 //# sourceMappingURL=bedControl.js.map

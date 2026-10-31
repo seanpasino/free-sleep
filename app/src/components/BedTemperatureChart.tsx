@@ -3,9 +3,14 @@ import { useMemo, useState } from 'react';
 import moment from 'moment-timezone';
 import { Box, Card, Chip, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
 import { useBedTemperatures, useLiveBedTemperatures } from '@api/bedTemperatures.ts';
+import { useBedEvents } from '@api/nights.ts';
+import { useSchedules } from '@api/schedules.ts';
+import { useSettings } from '@api/settings.ts';
 import { SleepRecord } from '../../../server/src/db/sleepRecordsSchema.ts';
 import BedTemperaturePlot from './BedTemperaturePlot.tsx';
-import { fmtF, fmtRange, liveWindow, ON_TARGET_F, onTargetStats, SERIES, SeriesKey, Side } from '@lib/bedTemperature.ts';
+import {
+  DAY_OF_NIGHT, fmtF, fmtRange, liveWindow, nightOf, ON_TARGET_F, onTargetStats, schedulePlan, SERIES, SeriesKey, Side,
+} from '@lib/bedTemperature.ts';
 import { COLORS } from '../theme.ts';
 
 export type BedTemperatureMode = 'live' | 'night';
@@ -50,6 +55,20 @@ export default function BedTemperatureChart({ side, sleepRecord, mode, setMode }
     if (activeMode === 'night') return { rows: night.data ?? [], on: null };
     return liveWindow(liveRows, side);
   }, [activeMode, night.data, liveRows, side]);
+
+  // In the live view, tonight's schedule runs on past the data to power-off
+  const { data: schedules } = useSchedules();
+  const { data: settings } = useSettings();
+  const liveNight = activeMode === 'live' && on ? nightOf(on.from) : undefined;
+  const plan = useMemo(() => (liveNight
+    ? schedulePlan(schedules?.[side]?.[DAY_OF_NIGHT(liveNight)], liveNight, settings?.timeZone || moment.tz.guess())
+    : null), [schedules, side, liveNight, settings?.timeZone]);
+  const { data: events } = useBedEvents(
+    side,
+    rows.length ? new Date(rows[0].timestamp).toISOString() : undefined,
+    rows.length && activeMode === 'night' ? new Date(rows[rows.length - 1].timestamp).toISOString() : undefined,
+    activeMode === 'live' ? 60_000 : false,
+  );
 
   const stats = useMemo(() => {
     const target = onTargetStats(rows, side);
@@ -141,7 +160,15 @@ export default function BedTemperatureChart({ side, sleepRecord, mode, setMode }
             No temperature history for this time. It is kept for 30 days, starting Oct 29, 2026.
           </Typography>
         ) : (
-          <BedTemperaturePlot rows={ rows } side={ side } visible={ visible } height={ 280 }/>
+          <BedTemperaturePlot
+            rows={ rows }
+            side={ side }
+            visible={ visible }
+            height={ 280 }
+            plan={ plan }
+            extendTo={ on?.to === null && plan ? plan[plan.length - 1].time : undefined }
+            events={ events }
+          />
         ) }
       </Box>
     </Card>

@@ -3,8 +3,14 @@ import { useMemo } from 'react';
 import moment from 'moment-timezone';
 import { Box, Card, Skeleton, Typography } from '@mui/material';
 import { useLiveBedTemperatures } from '@api/bedTemperatures.ts';
+import { useBedEvents } from '@api/nights.ts';
+import { useSchedules } from '@api/schedules.ts';
+import { useSettings } from '@api/settings.ts';
 import BedTemperaturePlot from './BedTemperaturePlot.tsx';
-import { liveWindow, ON_TARGET_F, onTargetStats, seriesColor, SeriesKey, Side } from '@lib/bedTemperature.ts';
+import NightRating from './NightRating.tsx';
+import {
+  DAY_OF_NIGHT, liveWindow, nightOf, ON_TARGET_F, onTargetStats, schedulePlan, seriesColor, SeriesKey, Side,
+} from '@lib/bedTemperature.ts';
 import { COLORS } from '../theme.ts';
 
 const VISIBLE: SeriesKey[] = ['bed', 'setpoint', 'water', 'room'];
@@ -12,6 +18,8 @@ const VISIBLE: SeriesKey[] = ['bed', 'setpoint', 'water', 'room'];
 const FRESH_MS = 5 * 60_000;
 const TREND_MINUTES = 15;
 const TREND_MIN_F = 0.3;
+// After power-off, the card asks how the night felt until this long after
+const RATE_FOR_MS = 14 * 3600_000;
 
 const toDisplay = (f: number, celsius: boolean) => (celsius ? (f - 32) * 5 / 9 : f);
 
@@ -34,6 +42,13 @@ const Reading = ({ label, value, color, dashed = false, note }: {
     <Typography sx={ { fontSize: 11, color: COLORS.textTertiary, minHeight: 16, fontVariantNumeric: 'tabular-nums' } }>
       { note ?? '' }
     </Typography>
+  </Box>
+);
+
+const LegendItem = ({ label, line }: { label: string; line: string }) => (
+  <Box sx={ { display: 'flex', alignItems: 'center', gap: 0.5 } }>
+    <Box component="span" sx={ { width: 14, borderTop: line } }/>
+    <Typography sx={ { fontSize: 11, color: COLORS.textTertiary } }>{ label }</Typography>
   </Box>
 );
 
@@ -70,6 +85,14 @@ export default function TonightCard({ side, isOn, setpointF, displayCelsius }: T
   const allRows = useMemo(() => data ?? [], [data]);
   const { rows, on } = useMemo(() => liveWindow(allRows, side), [allRows, side]);
   const stats = useMemo(() => onTargetStats(rows, side), [rows, side]);
+  const { data: schedules } = useSchedules();
+  const { data: settings } = useSettings();
+  const night = on ? nightOf(on.from) : undefined;
+  const plan = useMemo(() => (night
+    ? schedulePlan(schedules?.[side]?.[DAY_OF_NIGHT(night)], night, settings?.timeZone || moment.tz.guess())
+    : null), [schedules, side, night, settings?.timeZone]);
+  const windowStart = rows.length ? new Date(rows[0].timestamp).toISOString() : undefined;
+  const { data: events } = useBedEvents(side, windowStart, undefined, 60_000);
 
   if (isLoading) {
     return <Skeleton variant="rounded" height={ 300 } sx={ { borderRadius: '18px', bgcolor: COLORS.surface } }/>;
@@ -127,7 +150,29 @@ export default function TonightCard({ side, isOn, setpointF, displayCelsius }: T
 
       { rows.length > 1 && (
         <Box sx={ { mt: 0.5, mx: -0.5 } }>
-          <BedTemperaturePlot rows={ rows } side={ side } visible={ VISIBLE } height={ 170 } compact/>
+          <BedTemperaturePlot
+            rows={ rows }
+            side={ side }
+            visible={ VISIBLE }
+            height={ 170 }
+            compact
+            plan={ plan }
+            extendTo={ liveNow && plan ? plan[plan.length - 1].time : undefined }
+            events={ events }
+          />
+          <Box sx={ { display: 'flex', gap: 1.5, flexWrap: 'wrap', mt: 0.75, ml: '34px' } }>
+            <LegendItem label="Setpoint" line={ `2px dashed ${seriesColor('setpoint')}` }/>
+            { plan && <LegendItem label="Schedule" line={ `2px dotted ${COLORS.textTertiary}` }/> }
+            { !!events?.some((e) => e.kind === 'button' || e.kind === 'manual') && (
+              <LegendItem label="Your changes" line={ `2px dashed ${COLORS.warm}` }/>
+            ) }
+          </Box>
+        </Box>
+      ) }
+
+      { !liveNow && on?.to && Date.now() - on.to < RATE_FOR_MS && night && (
+        <Box sx={ { mt: 2, pt: 1.5, borderTop: `1px solid ${COLORS.divider}` } }>
+          <NightRating side={ side } night={ night } title="How did last night feel?"/>
         </Box>
       ) }
 

@@ -11,10 +11,10 @@ import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js
 import logger from '../logger.js';
 import { fToLevel, levelToF, MAX_TARGET_F, MIN_TARGET_F } from '../8sleep/temperatureLevels.js';
 import { executeFunction } from '../8sleep/deviceApi.js';
-import { bedControlEnabled, correctBed, noteWaterTarget, sampleSurface, waterTargetLevel } from '../8sleep/bedControl.js';
+import { bedBoostF, bedControlEnabled, bedTemperatureF, bedWaterF, correctBed, noteWaterTarget, sampleSurface, waterTargetLevel, } from '../8sleep/bedControl.js';
 import { isPresent } from '../routes/metrics/presence.js';
 import { recordBedTemperatures } from './bedHistory.js';
-const COMFORT_LOG = '/persistent/free-sleep-data/comfort-log.jsonl';
+export const COMFORT_LOG = '/persistent/free-sleep-data/comfort-log.jsonl';
 // Outside lowdb/ on purpose: writes there make the job scheduler look for changes
 const COMFORT_STATE = '/persistent/free-sleep-data/comfort-state.json';
 const SNAPSHOT_EVERY_MINUTES = 5;
@@ -179,10 +179,11 @@ const recheck = async () => {
         logger.error(error);
     }
 };
-// Bed control: each minute, for each side that is on (and not in away mode), nudge the water so the
-// bed temperature holds its setpoint. A side whose partner is in away mode drives both sides' water,
-// as updateDeviceStatus does. Only while someone is in bed: an empty bed runs ~3°F cooler than an
-// occupied one at the same water, so learning from it undoes the offset just before bedtime.
+// Bed control: each minute, for each side that is on (and not in away mode), hold the water at the
+// bed setpoint + learned offset (+ any boost after a change) and, while someone is in bed, learn the
+// offset. A side whose partner is in away mode drives both sides' water, as updateDeviceStatus does.
+// Learning needs someone in bed: an empty bed runs ~3°F cooler than an occupied one at the same water,
+// so learning from it undoes the offset just before bedtime.
 const bedControlTick = async (sensors, status) => {
     try {
         if (!bedControlEnabled() || !status)
@@ -190,21 +191,25 @@ const bedControlTick = async (sensors, status) => {
         await settingsDB.read();
         const bothSides = settingsDB.data.left.awayMode || settingsDB.data.right.awayMode;
         for (const side of ['left', 'right']) {
-            if (settingsDB.data[side].awayMode || !status[side].isOn || !isPresent(side))
+            if (settingsDB.data[side].awayMode || !status[side].isOn)
                 continue;
-            const next = correctBed(side);
-            if (!next)
+            const learned = isPresent(side) ? correctBed(side) : null;
+            const waterF = bedWaterF(side);
+            if (waterF === null)
                 continue;
-            const level = fToLevel(next.waterF);
+            const level = fToLevel(waterF);
             if (level === waterTargetLevel(side))
                 continue;
             for (const target of bothSides ? ['left', 'right'] : [side]) {
                 await executeFunction(target === 'left' ? 'TEMP_LEVEL_LEFT' : 'TEMP_LEVEL_RIGHT', level.toString());
                 noteWaterTarget(target, level);
             }
-            logger.info(`BedControl: ${side} bed ${next.bedF}°F, setpoint ${next.setpointF}°F -> water ${levelToF(level)}°F `
-                + `(offset ${next.offsetF.toFixed(2)})`);
-            logComfortEvent('bed_correct', { side, ...next, level });
+            const bedF = bedTemperatureF(side);
+            const boost = bedBoostF(side);
+            logger.info(`BedControl: ${side} bed ${bedF}°F -> water ${levelToF(level)}°F`
+                + (learned ? ` (offset ${learned.offsetF.toFixed(2)})` : '')
+                + (boost ? ` (boost ${boost > 0 ? '+' : ''}${boost.toFixed(2)}°F)` : ''));
+            logComfortEvent('bed_correct', { side, bedF, waterF, level, boostF: boost, ...(learned ?? {}) });
         }
     }
     catch (error) {

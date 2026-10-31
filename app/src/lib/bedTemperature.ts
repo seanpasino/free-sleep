@@ -1,5 +1,7 @@
 // Shared helpers for the bed temperature history (Sleep page card and the Temperature page's Tonight card)
+import moment from 'moment-timezone';
 import { BedTemperatureRecord } from '@api/bedTemperatures.ts';
+import { DailySchedule, DayOfWeek } from '@api/schedulesSchema.ts';
 import { COLORS } from '../theme.ts';
 
 export type Side = 'left' | 'right';
@@ -69,3 +71,29 @@ export const onTargetStats = (rows: BedTemperatureRecord[], side: Side) => {
     bedAvg: bed.length ? bed.reduce((a, b) => a + b, 0) / bed.length : null,
   };
 };
+
+export type PlanPoint = { time: number; f: number };
+
+// The night's schedule as setpoint steps: power-on, each step, then power-off (holding the last
+// value), on the night's own dates (times before noon are the next morning). Null if the night's
+// power schedule is off.
+export const schedulePlan = (schedule: DailySchedule | undefined, night: string, timeZone: string): PlanPoint[] | null => {
+  if (!schedule?.power.enabled) return null;
+  const at = (hhmm: string) => {
+    const t = moment.tz(`${night} ${hhmm}`, 'YYYY-MM-DD HH:mm', timeZone);
+    return (Number(hhmm.slice(0, 2)) < 12 ? t.add(1, 'day') : t).valueOf();
+  };
+  const on = at(schedule.power.on);
+  const off = at(schedule.power.off);
+  const steps = Object.entries(schedule.temperatures)
+    .map(([hhmm, f]) => ({ time: at(hhmm), f }))
+    .filter((p) => p.time > on && p.time < off)
+    .sort((a, b) => a.time - b.time);
+  const points: PlanPoint[] = [{ time: on, f: schedule.power.onTemperature }, ...steps];
+  return [...points, { time: off, f: points[points.length - 1].f }];
+};
+
+// The night a time belongs to, as schedules name them
+export const nightOf = (epochMs: number) => moment(epochMs).subtract(12, 'hours').format('YYYY-MM-DD');
+
+export const DAY_OF_NIGHT = (night: string) => moment(night, 'YYYY-MM-DD').format('dddd').toLowerCase() as DayOfWeek;

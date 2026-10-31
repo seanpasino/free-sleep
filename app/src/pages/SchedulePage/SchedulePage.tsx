@@ -31,6 +31,7 @@ import { reportError, useAppStore } from '@state/appStore.tsx';
 import { useSchedules } from '@api/schedules';
 import { useScheduleStore } from './scheduleStore.tsx';
 import { useSettings } from '@api/settings';
+import { useBedControlEnabled } from '@api/telemetry.ts';
 import { LOWERCASE_DAYS } from './days.ts';
 
 
@@ -68,6 +69,7 @@ export default function SchedulePage() {
   const [selectedPoint, setSelectedPoint] = useState<string | undefined>();
   const hasPickedInitialDay = useRef(false);
   const { data: settings } = useSettings();
+  const { data: bedControl = false } = useBedControlEnabled();
   const displayCelsius = settings?.temperatureFormat === 'celsius';
   useEffect(() => {
     const day = getAdjustedDayOfWeek();
@@ -206,9 +208,16 @@ export default function SchedulePage() {
             gap: 1,
           } }>
           <Box sx={ { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', px: 0.5 } }>
-            <Typography sx={ { fontSize: 14, fontWeight: 500 } }>Temperature through the night</Typography>
+            <Typography sx={ { fontSize: 14, fontWeight: 500 } }>
+              { bedControl ? 'Bed temperature through the night' : 'Temperature through the night' }
+            </Typography>
             { scheduleOn && <Typography sx={ { fontSize: 12, color: COLORS.textTertiary } }>Drag a point</Typography> }
           </Box>
+          { bedControl && (
+            <Typography sx={ { fontSize: 12, color: COLORS.textTertiary, px: 0.5, mt: -0.5 } }>
+              What the bed surface holds. The Pod runs the water a few degrees cooler to get there.
+            </Typography>
+          ) }
           { selectedSchedule && scheduleOn ? (
             <>
               <NightTimeline

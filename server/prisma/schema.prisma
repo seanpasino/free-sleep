@@ -78,3 +78,15 @@ model bed_temperatures {
   right_on           Boolean?
   right_present      Boolean?
 }
+
+// How a night felt, from the morning rating in the app: -1 too cold, 0 just right, 1 too warm
+model sleep_ratings {
+  id         Int    @id @default(autoincrement())
+  side       String
+  night      String // YYYY-MM-DD the night started (local), as schedules name nights
+  early      Int?
+  late       Int?
+  updated_at Int // Unix timestamp
+
+  @@unique([side, night])
+}

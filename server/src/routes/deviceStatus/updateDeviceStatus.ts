@@ -44,7 +44,8 @@ const updateSide = async (side: 'left' | 'right', sideStatus: DeepPartial<SideSt
 
   if (targetTemperatureF) {
     // With bed control on, the requested temperature is the bed setpoint; send the water target for it
-    const waterF = bedControlEnabled() ? setBedSetpoint(side, targetTemperatureF) : targetTemperatureF;
+    // (a change to a side that stays on, rather than a power-on, may be boosted)
+    const waterF = bedControlEnabled() ? setBedSetpoint(side, targetTemperatureF, isOn === undefined) : targetTemperatureF;
     const level = calculateLevelFromF(waterF);
     if (updateLeft) await executeFunction('TEMP_LEVEL_LEFT', level);
     if (updateRight) await executeFunction('TEMP_LEVEL_RIGHT', level);

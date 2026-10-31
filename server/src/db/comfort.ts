@@ -25,6 +25,8 @@ export type Comfort = {
     enabled: boolean;
     // Surface probe that is "the bed temperature": 'cen' (center/torso zone, recommended), or 'avg'/'max'/'min'
     probe: SurfaceProbe;
+    // Faster setpoint changes: the water overshoots briefly after a change (bedControl.ts setBedSetpoint)
+    boost: boolean;
   };
 };
 
@@ -39,6 +41,7 @@ const defaultData: Comfort = {
   surfaceControl: {
     enabled: false,
     probe: 'cen',
+    boost: false,
   },
 };
 

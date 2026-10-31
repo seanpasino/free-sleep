@@ -22,6 +22,10 @@ import { useMovementRecords } from '@api/movement.ts';
 import MovementChart from '@components/MovementChart.tsx';
 import ErrorBoundary from '@components/ErrorBoundary.tsx';
 import BedTemperatureChart, { BedTemperatureMode } from '@components/BedTemperatureChart.tsx';
+import NightRating from '@components/NightRating.tsx';
+import NightsCard from '@components/NightsCard.tsx';
+import { Card } from '@mui/material';
+import { nightOf } from '@lib/bedTemperature.ts';
 
 
 const NoData = () => {
@@ -141,6 +145,14 @@ export default function SleepPage() {
               mode={ temperatureMode }
               setMode={ setTemperatureMode }
             />
+          </ErrorBoundary>
+          { selectedSleepRecord && (
+            <Card sx={ { mt: 2, p: 2 } }>
+              <NightRating side={ side } night={ nightOf(Date.parse(selectedSleepRecord.entered_bed_at)) }/>
+            </Card>
+          ) }
+          <ErrorBoundary componentName="Nights card">
+            <NightsCard side={ side }/>
           </ErrorBoundary>
           {
             selectedSleepRecord &&
