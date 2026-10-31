@@ -13,6 +13,7 @@ import PodStatusPill from './PodStatusPill.tsx';
 import PowerButton from './PowerButton.tsx';
 import PrimingNotification from './PrimingNotification.tsx';
 import SideCards from '@components/SideCards.tsx';
+import TonightCard from '@components/TonightCard.tsx';
 import TemperatureControl from './TemperatureControl.tsx';
 import WaterNotification from './WaterNotification.tsx';
 import { COLORS } from '../../theme.ts';
@@ -113,6 +114,16 @@ export default function ControlTempPage() {
             </ErrorBoundary>
           </Box>
           { !isInAwayMode && <PowerButton isOn={ isOn }/> }
+          { !isInAwayMode && (
+            <ErrorBoundary componentName="Tonight card">
+              <TonightCard
+                side={ side }
+                isOn={ isOn }
+                setpointF={ sideStatus.targetTemperatureF }
+                displayCelsius={ settings?.temperatureFormat === 'celsius' || false }
+              />
+            </ErrorBoundary>
+          ) }
         </>
       ) }
 
