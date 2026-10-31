@@ -117,6 +117,9 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
 
     # Create baseline
     baseline_start_time, baseline_end_time = identify_baseline_period(merged_df, side, threshold_range=10_000, empty_minutes=5)
+    if baseline_start_time is None:
+        # Without an empty window the baseline would be the mean of the whole range, occupied time included
+        raise RuntimeError(f'No empty-bed period found for {side} side, keeping the previous baseline')
     cap_baseline = create_cap_baseline_from_cap_df(merged_df, baseline_start_time, baseline_end_time, side, min_std=5)
     save_baseline(side, cap_baseline)
 
