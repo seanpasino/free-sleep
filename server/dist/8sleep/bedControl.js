@@ -41,7 +41,7 @@ const BODY_MIN_RISE = 1000;
 const CAP_BASELINE_MAX_AGE_S = 24 * 60 * 60;
 // A zone just moved onto reads cool until body heat reaches it, so learning waits after a shift
 const POSITION_SHIFT = 0.5; // On the position scale below
-const POSITION_PAUSE_MS = 20 * 60 * 1000;
+const POSITION_PAUSE_MS = 10 * 60 * 1000;
 const samples = { left: [], right: [] };
 // Last water target the firmware reported, per side (noted by loadDeviceStatus)
 const waterTarget = {};
@@ -83,7 +83,7 @@ const notePosition = (side, weights) => {
     position[side] = { settled: now, pauseUntil: Date.now() + POSITION_PAUSE_MS };
     const percent = (w) => Math.round(w * 100);
     logger.info(`BedControl: ${side} body position out ${percent(weights.out)}% cen ${percent(weights.cen)}% in ${percent(weights.in)}%, `
-        + 'learning paused 20 min');
+        + `learning paused ${POSITION_PAUSE_MS / 60000} min`);
 };
 const bodyValue = (side, zones, cap) => {
     const baseline = isPresent(side) && cap ? capBaseline(side) : null;
