@@ -38,8 +38,7 @@ const updateSide = async (side, sideStatus) => {
     }
     if (targetTemperatureF) {
         // With bed control on, the requested temperature is the bed setpoint; send the water target for it
-        // (a change to a side that stays on, rather than a power-on, may be boosted)
-        const waterF = bedControlEnabled() ? setBedSetpoint(side, targetTemperatureF, isOn === undefined) : targetTemperatureF;
+        const waterF = bedControlEnabled() ? setBedSetpoint(side, targetTemperatureF) : targetTemperatureF;
         const level = calculateLevelFromF(waterF);
         if (updateLeft)
             await executeFunction('TEMP_LEVEL_LEFT', level);

@@ -1,9 +1,9 @@
 // Bed (surface) temperature control. With comfortDB `surfaceControl.enabled`, the temperature the app,
 // HA, the side buttons and schedules show and set is the bed surface temperature, not the water's.
-// The firmware only takes a water target, so each side keeps a bed setpoint and an offset here:
-// water target = setpoint + offset. A setpoint change moves the water by the same amount at once;
-// every minute, the offset is nudged so the measured bed temperature holds the setpoint as the room
-// and body heat drift. State: /persistent/free-sleep-data/bed-state.json.
+// The firmware only takes a water target, so this is a PI loop around it, recalculated every minute:
+// water target = feed-forward(setpoint) + offset (the integral term) + proportional term.
+// While the side is empty only the first two apply and the offset is left alone.
+// State: /persistent/free-sleep-data/bed-state.json.
 import fs from 'fs';
 import comfortDB from '../db/comfort.js';
 import logger from '../logger.js';
@@ -15,39 +15,38 @@ const BED_STATE = '/persistent/free-sleep-data/bed-state.json';
 // Bed temperature = median of the chosen probe over 5 min (sheds the ~0.2°F sample jitter)
 const SURFACE_WINDOW_MS = 5 * 60 * 1000;
 const SURFACE_STALE_SECONDS = 10 * 60;
-// Offset change per minute per °F of error (integral time 25 min). With the water's ~15 min and the
-// bed's ~23 min lags, a simple model puts the point of oscillation near 0.11, so this keeps a margin of
-// about 2.7. Was 0.02 until 2026-11-01, doubled because the user wanted faster correction.
-const GAIN_PER_MIN = 0.04;
-// Leave it alone this close to the setpoint (one firmware level is ~0.2-0.3°F)
-const DEADBAND_F = 0.3;
+// Loop tuning, from the nights of 2026-10-30 to 11-01: the bed follows the water with a gain of about
+// 0.7 and a time constant of about 18 min, and the water follows its target in about 5 min.
+// Water °F per °F of bed error, applied at once: this is also what speeds up a setpoint change, and it
+// fades by itself as the bed arrives
+const PROPORTIONAL_GAIN = 1.5;
+const MAX_PROPORTIONAL_F = 6;
+// Offset change per minute per °F of error (integral time about 21 min)
+const INTEGRAL_GAIN_PER_MIN = 0.07;
+// Below this the error is sensor jitter (one firmware level is ~0.2-0.3°F)
+const INTEGRAL_DEADBAND_F = 0.15;
+// A larger error is the bed catching up to a change; integrating it would overshoot
+const INTEGRAL_MAX_ERROR_F = 1.5;
 const MAX_OFFSET_F = 10;
-// Faster setpoint changes (comfortDB surfaceControl.boost): the water first moves by (1 + BOOST_GAIN)
-// times the change, holds for BOOST_HOLD_MS, then fades back to setpoint + offset over BOOST_FADE_MS.
-// Measured 2026-10-31: the center probe follows the water with a time constant of about 23 min, so a
-// short, strong push gets there sooner with less overshoot than a long, gentle one.
-const BOOST_GAIN = 2;
-const BOOST_MAX_F = 6;
-const BOOST_MIN_CHANGE_F = 0.5;
-const BOOST_HOLD_MS = 8 * 60 * 1000;
-const BOOST_FADE_MS = 10 * 60 * 1000;
-// Right after a change the gap between bed and setpoint is the mattress catching up, not a wrong
-// offset; learning from it winds the offset past where it settles
-const LEARN_PAUSE_MS = 45 * 60 * 1000;
+// The bed moves about 0.7°F per 1°F of water (body heat counts for less as the water warms), so a
+// setpoint 1°F warmer needs the water about 1.5°F warmer. With this the offset is the same at every
+// setpoint, so a wake-up ramp doesn't carry over into the next night's bedtime.
+const FEED_FORWARD_SLOPE = 0.5;
+const FEED_FORWARD_REFERENCE_F = 76;
 // Probe 'body': the bed temperature is the probes weighted by where capacitance finds the sleeper.
 // Below this summed rise over the empty-bed baseline there's no reliable position (the stream's
 // CapPresence stays confirmed down to the same level), so the center probe is used.
 const BODY_MIN_RISE = 1000;
 // The stream saves the baseline every 15 min; much older means it isn't running
 const CAP_BASELINE_MAX_AGE_S = 24 * 60 * 60;
-// A zone just moved onto reads cool until body heat reaches it, so learning waits after a shift
-const POSITION_SHIFT = 0.5; // On the position scale below
-const POSITION_PAUSE_MS = 10 * 60 * 1000;
+// Logged when the sleeper moves this far, on the position scale below
+const POSITION_SHIFT = 0.5;
+// Capacitance briefly losing the sleeper would otherwise jump the reading ~2°F to the center probe
+const POSITION_HOLD_MS = 10 * 60 * 1000;
 const samples = { left: [], right: [] };
 // Last water target the firmware reported, per side (noted by loadDeviceStatus)
 const waterTarget = {};
 export const bedControlEnabled = () => comfortDB.data.surfaceControl?.enabled === true;
-const boostEnabled = () => comfortDB.data.surfaceControl?.boost === true;
 const clampF = (f) => Math.min(MAX_TARGET_F, Math.max(MIN_TARGET_F, f));
 // Share of the body over each zone. Rises are squared because a body also raises the zones next to
 // it: on 2026-10-31 lying over `in` raised it 2588 and `cen` 1154, while `in` read 3°F above `cen`.
@@ -76,26 +75,31 @@ const capBaseline = (side) => {
 };
 // Where the sleeper is, -1 (outer edge) to +1 (middle of the bed), while the side is occupied
 const position = {};
+const lastWeights = {};
 const notePosition = (side, weights) => {
     const now = weights.in - weights.out;
     const last = position[side];
-    if (last && Math.abs(now - last.settled) < POSITION_SHIFT)
+    if (last !== undefined && Math.abs(now - last) < POSITION_SHIFT)
         return;
-    position[side] = { settled: now, pauseUntil: Date.now() + POSITION_PAUSE_MS };
+    position[side] = now;
     const percent = (w) => Math.round(w * 100);
-    logger.info(`BedControl: ${side} body position out ${percent(weights.out)}% cen ${percent(weights.cen)}% in ${percent(weights.in)}%, `
-        + `learning paused ${POSITION_PAUSE_MS / 60000} min`);
+    logger.info(`BedControl: ${side} body position out ${percent(weights.out)}% cen ${percent(weights.cen)}% in ${percent(weights.in)}%`);
 };
 const bodyValue = (side, zones, cap) => {
     const baseline = isPresent(side) && cap ? capBaseline(side) : null;
     const weights = baseline && cap ? bodyWeights(cap, baseline) : null;
-    if (!weights) {
-        if (!isPresent(side))
-            delete position[side];
+    const now = Date.now();
+    if (weights) {
+        notePosition(side, weights);
+        lastWeights[side] = { weights, at: now };
+    }
+    const held = lastWeights[side];
+    if (!held || now - held.at > POSITION_HOLD_MS) {
+        delete position[side];
+        delete lastWeights[side];
         return zones.cen;
     }
-    notePosition(side, weights);
-    return weights.out * zones.out + weights.cen * zones.cen + weights.in * zones.in;
+    return held.weights.out * zones.out + held.weights.cen * zones.cen + held.weights.in * zones.in;
 };
 const probeValue = (side, zones, cap) => {
     switch (comfortDB.data.surfaceControl?.probe) {
@@ -156,6 +160,15 @@ export const noteWaterTarget = (side, level) => {
 };
 export const waterTargetLevel = (side) => waterTarget[side]?.level ?? null;
 export const bedSetpointF = (side) => readState()[side]?.setpointF ?? null;
+const feedForwardF = (setpointF) => setpointF + FEED_FORWARD_SLOPE * (setpointF - FEED_FORWARD_REFERENCE_F);
+// Proportional term: only while someone is in bed, since an empty bed reads ~3°F cooler at the same water
+export const bedProportionalF = (side, setpointF) => {
+    const bedF = isPresent(side) ? bedTemperatureF(side) : null;
+    if (bedF === null)
+        return 0;
+    return Math.max(-MAX_PROPORTIONAL_F, Math.min(MAX_PROPORTIONAL_F, PROPORTIONAL_GAIN * (setpointF - bedF)));
+};
+const unclampedWaterF = (side, bed) => feedForwardF(bed.setpointF) + bed.offsetF + bedProportionalF(side, bed.setpointF);
 // A side's setpoint and offset. The first time (bed control just switched on) it is seeded from the
 // current bed temperature, with the offset that keeps the water where it is, so nothing moves.
 export const bedSide = (side) => {
@@ -168,74 +181,43 @@ export const bedSide = (side) => {
     if (bedF === null || !water)
         return null;
     const setpointF = clampF(Math.round(bedF));
-    const seeded = { setpointF, offsetF: water.f - setpointF };
+    const seeded = { setpointF, offsetF: water.f - feedForwardF(setpointF) };
     state[side] = seeded;
     writeState(state);
     logger.info(`BedControl: ${side} bed setpoint seeded at ${setpointF}°F (bed ${bedF}°F, water ${water.f}°F)`);
     return seeded;
 };
-// Extra water change still in effect from the last setpoint change
-const boostF = (bed, now = Date.now()) => {
-    if (!bed.boost)
-        return 0;
-    const age = now - bed.boost.at;
-    if (age < BOOST_HOLD_MS)
-        return bed.boost.extraF;
-    if (age < BOOST_HOLD_MS + BOOST_FADE_MS)
-        return bed.boost.extraF * (1 - (age - BOOST_HOLD_MS) / BOOST_FADE_MS);
-    return 0;
-};
-// The water target that holds a side's bed at its setpoint, boost included
+// The water target that holds a side's bed at its setpoint
 export const bedWaterF = (side) => {
     const bed = bedSide(side);
-    return bed ? clampF(bed.setpointF + bed.offsetF + boostF(bed)) : null;
+    return bed ? clampF(unclampedWaterF(side, bed)) : null;
 };
-export const bedBoostF = (side) => {
-    const bed = readState()[side];
-    return bed ? Math.round(boostF(bed) * 100) / 100 : 0;
-};
-// New bed setpoint from the app, HA, a button or a schedule. Returns the water target to send: it
-// moves by the same amount as the setpoint, plus a boost when `change` (a side that is already on)
-// and boosting is enabled.
-export const setBedSetpoint = (side, setpointF, change = false) => {
+// New bed setpoint from the app, HA, a button or a schedule. Returns the water target to send.
+export const setBedSetpoint = (side, setpointF) => {
     const current = bedSide(side);
-    const offsetF = current?.offsetF ?? 0;
+    const updated = { setpointF: clampF(setpointF), offsetF: current?.offsetF ?? 0 };
     const state = readState();
-    const updated = { setpointF: clampF(setpointF), offsetF };
-    const deltaF = current ? updated.setpointF - current.setpointF : 0;
-    if (change && boostEnabled() && Math.abs(deltaF) >= BOOST_MIN_CHANGE_F) {
-        const extraF = Math.max(-BOOST_MAX_F, Math.min(BOOST_MAX_F, deltaF * BOOST_GAIN));
-        updated.boost = { extraF, at: Date.now() };
-        updated.learnAfter = Date.now() + LEARN_PAUSE_MS;
-        logger.info(`BedControl: ${side} setpoint ${current?.setpointF}°F -> ${updated.setpointF}°F, boosting water ${extraF > 0 ? '+' : ''}${extraF}°F`);
-    }
-    else if (current?.learnAfter && current.learnAfter > Date.now()) {
-        updated.learnAfter = current.learnAfter;
-    }
     state[side] = updated;
     writeState(state);
-    return clampF(updated.setpointF + offsetF + boostF(updated));
+    return clampF(unclampedWaterF(side, updated));
 };
-// One minute of learning for a side that is on and occupied: nudges the offset so the measured bed
-// temperature holds the setpoint. Returns what it did, or null when it left the offset alone.
+// One minute of the integral term for a side that is on and occupied. Returns what it did, or null
+// when it left the offset alone.
 export const correctBed = (side) => {
     const current = bedSide(side);
     const bedF = bedTemperatureF(side);
     if (!current || bedF === null)
         return null;
-    if (current.learnAfter && current.learnAfter > Date.now())
-        return null;
-    if ((position[side]?.pauseUntil ?? 0) > Date.now())
-        return null;
     const errorF = current.setpointF - bedF;
-    if (Math.abs(errorF) < DEADBAND_F)
+    if (Math.abs(errorF) < INTEGRAL_DEADBAND_F || Math.abs(errorF) > INTEGRAL_MAX_ERROR_F)
         return null;
-    const offsetF = Math.max(-MAX_OFFSET_F, Math.min(MAX_OFFSET_F, current.offsetF + GAIN_PER_MIN * errorF));
     // At the Pod's range limit more offset does nothing, so don't let it pile up
-    if (current.setpointF + offsetF !== clampF(current.setpointF + offsetF))
+    const waterF = unclampedWaterF(side, current);
+    if (waterF !== clampF(waterF))
         return null;
+    const offsetF = Math.max(-MAX_OFFSET_F, Math.min(MAX_OFFSET_F, current.offsetF + INTEGRAL_GAIN_PER_MIN * errorF));
     const state = readState();
-    state[side] = { ...current, offsetF };
+    state[side] = { setpointF: current.setpointF, offsetF };
     writeState(state);
     return { setpointF: current.setpointF, bedF, offsetF };
 };

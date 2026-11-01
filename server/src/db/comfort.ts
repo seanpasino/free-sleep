@@ -26,8 +26,6 @@ export type Comfort = {
     // Surface probe that is "the bed temperature": 'cen' (center/torso zone), 'avg'/'max'/'min', or 'body'
     // (the probes where capacitance finds the sleeper, center when the side is empty; bedControl.ts)
     probe: SurfaceProbe;
-    // Faster setpoint changes: the water overshoots briefly after a change (bedControl.ts setBedSetpoint)
-    boost: boolean;
   };
 };
 
@@ -42,7 +40,6 @@ const defaultData: Comfort = {
   surfaceControl: {
     enabled: false,
     probe: 'cen',
-    boost: false,
   },
 };
 

@@ -29,7 +29,7 @@ export type TelemetryControlSide = {
   secondsRemaining: number;
   awayMode: boolean;
   setpointF: number | null; // Bed setpoint while bed control is on
-  offsetF: number | null; // Learned water offset
+  offsetF: number | null; // Learned water offset (the bed loop's integral term)
   waterLevel: number; // Firmware heat level, -100..100
   isAlarmVibrating: boolean;
   lastButton: { button: 'top' | 'middle' | 'bottom'; at: string; heldMs?: number } | null;

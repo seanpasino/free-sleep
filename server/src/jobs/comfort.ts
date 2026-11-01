@@ -13,7 +13,7 @@ import logger from '../logger.js';
 import { fToLevel, levelToF, MAX_TARGET_F, MIN_TARGET_F } from '../8sleep/temperatureLevels.js';
 import { executeFunction } from '../8sleep/deviceApi.js';
 import {
-  bedBoostF, bedControlEnabled, bedTemperatureF, bedWaterF, correctBed, noteWaterTarget, sampleSurface, waterTargetLevel,
+  bedControlEnabled, bedProportionalF, bedSide, bedTemperatureF, bedWaterF, correctBed, noteWaterTarget, sampleSurface, waterTargetLevel,
 } from '../8sleep/bedControl.js';
 import { DeviceStatus } from '../routes/deviceStatus/deviceStatusSchema.js';
 import { isPresent } from '../routes/metrics/presence.js';
@@ -190,11 +190,11 @@ const recheck = async () => {
   }
 };
 
-// Bed control: each minute, for each side that is on (and not in away mode), hold the water at the
-// bed setpoint + learned offset (+ any boost after a change) and, while someone is in bed, learn the
-// offset. A side whose partner is in away mode drives both sides' water, as updateDeviceStatus does.
-// Learning needs someone in bed: an empty bed runs ~3°F cooler than an occupied one at the same water,
-// so learning from it undoes the offset just before bedtime.
+// Bed control: each minute, for each side that is on (and not in away mode), run the bed temperature
+// loop (8sleep/bedControl.ts) and send the water target when its firmware level changes. A side whose
+// partner is in away mode drives both sides' water, as updateDeviceStatus does.
+// The loop's corrections need someone in bed: an empty bed runs ~3°F cooler than an occupied one at the
+// same water, so correcting it would undo the offset just before bedtime.
 const bedControlTick = async (sensors: SensorSnapshot | null, status: DeviceStatus | null) => {
   try {
     if (!bedControlEnabled() || !status) return;
@@ -202,7 +202,7 @@ const bedControlTick = async (sensors: SensorSnapshot | null, status: DeviceStat
     const bothSides = settingsDB.data.left.awayMode || settingsDB.data.right.awayMode;
     for (const side of ['left', 'right'] as const) {
       if (settingsDB.data[side].awayMode || !status[side].isOn) continue;
-      const learned = isPresent(side) ? correctBed(side) : null;
+      if (isPresent(side)) correctBed(side);
       const waterF = bedWaterF(side);
       if (waterF === null) continue;
       const level = fToLevel(waterF);
@@ -212,13 +212,13 @@ const bedControlTick = async (sensors: SensorSnapshot | null, status: DeviceStat
         noteWaterTarget(target, level);
       }
       const bedF = bedTemperatureF(side);
-      const boost = bedBoostF(side);
+      const bed = bedSide(side);
+      const pF = bed ? Math.round(bedProportionalF(side, bed.setpointF) * 100) / 100 : 0;
       logger.info(
-        `BedControl: ${side} bed ${bedF}°F -> water ${levelToF(level)}°F`
-        + (learned ? ` (offset ${learned.offsetF.toFixed(2)})` : '')
-        + (boost ? ` (boost ${boost > 0 ? '+' : ''}${boost.toFixed(2)}°F)` : ''),
+        `BedControl: ${side} bed ${bedF}°F, setpoint ${bed?.setpointF}°F -> water ${levelToF(level)}°F`
+        + ` (offset ${bed?.offsetF.toFixed(2)}, P ${pF > 0 ? '+' : ''}${pF.toFixed(2)})`,
       );
-      logComfortEvent('bed_correct', { side, bedF, waterF, level, boostF: boost, ...(learned ?? {}) });
+      logComfortEvent('bed_correct', { side, bedF, waterF, level, pF, setpointF: bed?.setpointF, offsetF: bed?.offsetF });
     }
   } catch (error) {
     logger.error(error);
