@@ -15,9 +15,10 @@ const BED_STATE = '/persistent/free-sleep-data/bed-state.json';
 // Bed temperature = median of the chosen probe over 5 min (sheds the ~0.2°F sample jitter)
 const SURFACE_WINDOW_MS = 5 * 60 * 1000;
 const SURFACE_STALE_SECONDS = 10 * 60;
-// Offset change per minute per °F of error. Slow next to the 15-20 min the water and then the bed
-// take to respond (integral time ~50 min), so it settles instead of oscillating.
-const GAIN_PER_MIN = 0.02;
+// Offset change per minute per °F of error (integral time 25 min). With the water's ~15 min and the
+// bed's ~23 min lags, a simple model puts the point of oscillation near 0.11, so this keeps a margin of
+// about 2.7. Was 0.02 until 2026-11-01, doubled because the user wanted faster correction.
+const GAIN_PER_MIN = 0.04;
 // Leave it alone this close to the setpoint (one firmware level is ~0.2-0.3°F)
 const DEADBAND_F = 0.3;
 const MAX_OFFSET_F = 10;
