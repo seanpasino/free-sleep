@@ -5,7 +5,7 @@ import { DailySchedule, DayOfWeek } from '@api/schedulesSchema.ts';
 import { COLORS } from '../theme.ts';
 
 export type Side = 'left' | 'right';
-export type SeriesKey = 'bed' | 'setpoint' | 'water' | 'room' | 'otherBed' | 'out' | 'in' | 'probe';
+export type SeriesKey = 'bed' | 'setpoint' | 'water' | 'room' | 'otherBed' | 'out' | 'cen' | 'in' | 'probe';
 
 export type SeriesDef = {
   key: SeriesKey;
@@ -21,6 +21,7 @@ export const SERIES: SeriesDef[] = [
   { key: 'room', label: 'Room', color: '#A991FF', value: (r) => r.room },
   { key: 'otherBed', label: 'Other side', color: '#FFC46B', value: (r, _s, o) => r[`${o}_bed`] },
   { key: 'out', label: 'Outer edge', color: '#FF7A7A', value: (r, s) => r[`${s}_out`] },
+  { key: 'cen', label: 'Center', color: COLORS.cool, value: (r, s) => r[`${s}_cen`] },
   { key: 'in', label: 'Inner', color: COLORS.ok, value: (r, s) => r[`${s}_in`] },
   { key: 'probe', label: '"Side" probe', color: '#C9CEDA', value: (r, s) => r[`${s}_side`] },
 ];

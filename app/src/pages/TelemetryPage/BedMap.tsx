@@ -1,17 +1,16 @@
 /* eslint-disable react/no-multi-comp */
 import moment from 'moment-timezone';
-import { Box, Tooltip, Typography } from '@mui/material';
+import { useState } from 'react';
+import { Box, ButtonBase, Tooltip, Typography } from '@mui/material';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import { Telemetry } from '@api/telemetry.ts';
 import { formatTemp, SETPOINT_SCALE_F, setpointColor, temperatureColor } from './parts.tsx';
 import { COLORS } from '../../theme.ts';
+import ProbeHistoryDialog, { ProbeSelection, Zone, ZONE_LABEL, ZONES } from './ProbeHistoryDialog.tsx';
 
 type Side = 'left' | 'right';
-type Zone = 'out' | 'cen' | 'in';
 
-const ZONE_LABEL: Record<Zone, string> = { out: 'Outer', cen: 'Center', in: 'Inner' };
-// Across the bed from the left edge to the right edge, as the cover's probes are ordered
-const ZONES: Record<Side, Zone[]> = { left: ['out', 'cen', 'in'], right: ['in', 'cen', 'out'] };
 // Capacitance rise over the empty-bed baseline that fills a zone's load bar (a body adds ~1,000-3,000)
 const FULL_LOAD = 2000;
 const VITALS_FRESH_MS = 10 * 60_000;
@@ -22,8 +21,8 @@ const activeSetpoint = (side: Side, telemetry: Telemetry) => {
   return control.isOn && !control.awayMode ? control.setpointF : null;
 };
 
-const ZoneTile = ({ zone, tempF, cap, baseline, setpointF, celsius }: {
-  zone: Zone; tempF: number | null; cap: number | null; baseline: number | null; setpointF: number | null; celsius: boolean;
+const ZoneTile = ({ zone, tempF, cap, baseline, setpointF, celsius, onOpen }: {
+  zone: Zone; tempF: number | null; cap: number | null; baseline: number | null; setpointF: number | null; celsius: boolean; onOpen: () => void;
 }) => {
   const tint = (alpha: number) => (setpointF === null ? temperatureColor(tempF, alpha) : setpointColor(tempF, setpointF, alpha));
   const rise = cap !== null && baseline !== null ? cap - baseline : null;
@@ -34,7 +33,9 @@ const ZoneTile = ({ zone, tempF, cap, baseline, setpointF, celsius }: {
       title={ `${ZONE_LABEL[zone]} probe ${formatTemp(tempF, celsius)} · capacitance ${cap ?? '—'}`
         + (rise !== null ? ` (${rise >= 0 ? '+' : ''}${rise} over empty)` : '') }
     >
-      <Box
+      <ButtonBase
+        onClick={ onOpen }
+        aria-label={ `${ZONE_LABEL[zone]} probe history` }
         sx={ {
           flex: 1, minWidth: 0, height: 128, borderRadius: '12px', px: 0.5, py: 1,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between',
@@ -49,12 +50,14 @@ const ZoneTile = ({ zone, tempF, cap, baseline, setpointF, celsius }: {
         <Box sx={ { width: '70%', height: 4, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.08)', overflow: 'hidden' } } aria-hidden>
           <Box sx={ { width: `${load * 100}%`, height: '100%', bgcolor: COLORS.ok, transition: 'width 600ms ease' } }/>
         </Box>
-      </Box>
+      </ButtonBase>
     </Tooltip>
   );
 };
 
-const Half = ({ side, telemetry, celsius }: { side: Side; telemetry: Telemetry; celsius: boolean }) => {
+const Half = ({ side, telemetry, celsius, onOpen }: {
+  side: Side; telemetry: Telemetry; celsius: boolean; onOpen: (selection: ProbeSelection) => void;
+}) => {
   const cover = telemetry.cover.sides[side];
   const control = telemetry.controls.sides[side];
   const vitals = cover.vitals && Date.now() - Date.parse(cover.vitals.at) < VITALS_FRESH_MS ? cover.vitals : null;
@@ -74,7 +77,14 @@ const Half = ({ side, telemetry, celsius }: { side: Side; telemetry: Telemetry; 
         } }
       />
       <Box sx={ { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', px: 0.25 } }>
-        <Typography sx={ { fontSize: 13, fontWeight: 600 } }>{ side === 'left' ? 'Left' : 'Right' }</Typography>
+        <ButtonBase
+          onClick={ () => onOpen({ side, zone: null }) }
+          aria-label={ `${side === 'left' ? 'Left' : 'Right'} side probe history` }
+          sx={ { fontSize: 13, fontWeight: 600, borderRadius: '6px', py: 0.25, pr: 0.25, mt: -0.25 } }
+        >
+          { side === 'left' ? 'Left' : 'Right' }
+          <ChevronRightIcon sx={ { fontSize: 15, color: COLORS.textTertiary } }/>
+        </ButtonBase>
         <Typography sx={ { fontSize: 12, color: COLORS.textTertiary, fontVariantNumeric: 'tabular-nums' } }>
           Bed { formatTemp(cover.bedF, celsius) }
         </Typography>
@@ -89,6 +99,7 @@ const Half = ({ side, telemetry, celsius }: { side: Side; telemetry: Telemetry; 
             baseline={ cover.capacitance.baseline?.[zone] ?? null }
             setpointF={ setpointF }
             celsius={ celsius }
+            onOpen={ () => onOpen({ side, zone }) }
           />
         )) }
       </Box>
@@ -134,9 +145,11 @@ const ScaleLegend = ({ low, high, colors, caption }: { low: string; high: string
   </Box>
 );
 
-// Top-down view of the cover: each side's three surface probes as tiles, colored by distance from
-// that side's setpoint (a fixed scale when it's off or away), with a bar for how much load the capacitance sensor under that zone sees
+// The cover from the sleeper's point of view (see ZONES), pillows at the top: each side's three surface probes as tiles,
+// colored by distance from that side's setpoint (a fixed scale when it's off or away), with a bar for how much load the
+// capacitance sensor under that zone sees
 export default function BedMap({ telemetry, celsius }: { telemetry: Telemetry; celsius: boolean }) {
+  const [selection, setSelection] = useState<ProbeSelection | null>(null);
   const setpoints = (['left', 'right'] as Side[]).map((side) => activeSetpoint(side, telemetry));
   const delta = celsius ? Math.round(SETPOINT_SCALE_F * 5 / 9) : SETPOINT_SCALE_F;
   return (
@@ -147,9 +160,9 @@ export default function BedMap({ telemetry, celsius }: { telemetry: Telemetry; c
           border: `1px solid ${COLORS.border}`, bgcolor: 'rgba(255,255,255,0.015)',
         } }
       >
-        <Half side="left" telemetry={ telemetry } celsius={ celsius }/>
+        <Half side="right" telemetry={ telemetry } celsius={ celsius } onOpen={ setSelection }/>
         <Box sx={ { width: '1px', bgcolor: COLORS.border, my: 1 } }/>
-        <Half side="right" telemetry={ telemetry } celsius={ celsius }/>
+        <Half side="left" telemetry={ telemetry } celsius={ celsius } onOpen={ setSelection }/>
       </Box>
       <Box sx={ { display: 'flex', flexDirection: 'column', gap: 0.5, mt: 1.25 } }>
         { setpoints.some((s) => s !== null) && (
@@ -173,6 +186,7 @@ export default function BedMap({ telemetry, celsius }: { telemetry: Telemetry; c
           <Typography sx={ { fontSize: 11, color: COLORS.textTertiary } }>Load</Typography>
         </Box>
       </Box>
+      { selection && <ProbeHistoryDialog selection={ selection } onClose={ () => setSelection(null) }/> }
     </Box>
   );
 }

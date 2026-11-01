@@ -123,7 +123,7 @@ export default function BedTemperatureChart({ side, sleepRecord, mode, setMode }
       </Stack>
 
       <Stack direction="row" gap={ 0.75 } flexWrap="wrap" sx={ { mt: 1.5 } }>
-        { SERIES.map((s) => {
+        { SERIES.filter((s) => s.key !== 'cen').map((s) => {
           const isOn = visible.includes(s.key);
           return (
             <Chip
