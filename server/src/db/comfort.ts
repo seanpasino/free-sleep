@@ -5,7 +5,7 @@ import { Low } from 'lowdb';
 import { JSONFile } from 'lowdb/node';
 import config from '../config.js';
 
-export type SurfaceProbe = 'cen' | 'avg' | 'max' | 'min';
+export type SurfaceProbe = 'cen' | 'avg' | 'max' | 'min' | 'body';
 
 export type Comfort = {
   ambientCompensation: {
@@ -23,7 +23,8 @@ export type Comfort = {
   // as before.
   surfaceControl: {
     enabled: boolean;
-    // Surface probe that is "the bed temperature": 'cen' (center/torso zone, recommended), or 'avg'/'max'/'min'
+    // Surface probe that is "the bed temperature": 'cen' (center/torso zone), 'avg'/'max'/'min', or 'body'
+    // (the probes where capacitance finds the sleeper, center when the side is empty; bedControl.ts)
     probe: SurfaceProbe;
     // Faster setpoint changes: the water overshoots briefly after a change (bedControl.ts setBedSetpoint)
     boost: boolean;

@@ -7,7 +7,9 @@
 import fs from 'fs';
 import comfortDB from '../db/comfort.js';
 import logger from '../logger.js';
-import { readLatestSensors, SensorSnapshot } from './rawSensors.js';
+import config from '../config.js';
+import { isPresent } from '../routes/metrics/presence.js';
+import { CapZones, readLatestSensors, SensorSnapshot } from './rawSensors.js';
 import { levelToF, MAX_TARGET_F, MIN_TARGET_F } from './temperatureLevels.js';
 
 type Side = 'left' | 'right';
@@ -17,7 +19,7 @@ type BedSide = { setpointF: number; offsetF: number; boost?: { extraF: number; a
 type BedState = Partial<Record<Side, BedSide>>;
 
 const BED_STATE = '/persistent/free-sleep-data/bed-state.json';
-// Bed temperature = median of the center probe over 5 min (sheds the ~0.2°F sample jitter)
+// Bed temperature = median of the chosen probe over 5 min (sheds the ~0.2°F sample jitter)
 const SURFACE_WINDOW_MS = 5 * 60 * 1000;
 const SURFACE_STALE_SECONDS = 10 * 60;
 // Offset change per minute per °F of error. Slow next to the 15-20 min the water and then the bed
@@ -39,6 +41,16 @@ const BOOST_FADE_MS = 10 * 60 * 1000;
 // offset; learning from it winds the offset past where it settles
 const LEARN_PAUSE_MS = 45 * 60 * 1000;
 
+// Probe 'body': the bed temperature is the probes weighted by where capacitance finds the sleeper.
+// Below this summed rise over the empty-bed baseline there's no reliable position (the stream's
+// CapPresence stays confirmed down to the same level), so the center probe is used.
+const BODY_MIN_RISE = 1000;
+// The stream saves the baseline every 15 min; much older means it isn't running
+const CAP_BASELINE_MAX_AGE_S = 24 * 60 * 60;
+// A zone just moved onto reads cool until body heat reaches it, so learning waits after a shift
+const POSITION_SHIFT = 0.5; // On the position scale below
+const POSITION_PAUSE_MS = 20 * 60 * 1000;
+
 const samples: Record<Side, { at: number; f: number }[]> = { left: [], right: [] };
 // Last water target the firmware reported, per side (noted by loadDeviceStatus)
 const waterTarget: Partial<Record<Side, { level: number; f: number }>> = {};
@@ -48,8 +60,61 @@ const boostEnabled = () => comfortDB.data.surfaceControl?.boost === true;
 
 const clampF = (f: number) => Math.min(MAX_TARGET_F, Math.max(MIN_TARGET_F, f));
 
-const probeValue = (zones: { out: number; cen: number; in: number }) => {
+type ZoneWeights = CapZones;
+
+// Share of the body over each zone. Rises are squared because a body also raises the zones next to
+// it: on 2026-10-31 lying over `in` raised it 2588 and `cen` 1154, while `in` read 3°F above `cen`.
+export const bodyWeights = (cap: CapZones, baseline: CapZones): ZoneWeights | null => {
+  const rise = {
+    out: Math.max(cap.out - baseline.out, 0),
+    cen: Math.max(cap.cen - baseline.cen, 0),
+    in: Math.max(cap.in - baseline.in, 0),
+  };
+  if (rise.out + rise.cen + rise.in < BODY_MIN_RISE) return null;
+  const total = rise.out ** 2 + rise.cen ** 2 + rise.in ** 2;
+  return { out: rise.out ** 2 / total, cen: rise.cen ** 2 / total, in: rise.in ** 2 / total };
+};
+
+const capBaseline = (side: Side): CapZones | null => {
+  try {
+    const state = JSON.parse(fs.readFileSync(`${config.dbFolder}cap-baseline-${side}.json`, 'utf8'));
+    if (Date.now() / 1000 - state.saved_at > CAP_BASELINE_MAX_AGE_S) return null;
+    const { out, cen, in: inner } = state.baseline;
+    return [out, cen, inner].every(Number.isFinite) ? { out, cen, in: inner } : null;
+  } catch {
+    return null;
+  }
+};
+
+// Where the sleeper is, -1 (outer edge) to +1 (middle of the bed), while the side is occupied
+const position: Partial<Record<Side, { settled: number; pauseUntil: number }>> = {};
+
+const notePosition = (side: Side, weights: ZoneWeights) => {
+  const now = weights.in - weights.out;
+  const last = position[side];
+  if (last && Math.abs(now - last.settled) < POSITION_SHIFT) return;
+  position[side] = { settled: now, pauseUntil: Date.now() + POSITION_PAUSE_MS };
+  const percent = (w: number) => Math.round(w * 100);
+  logger.info(
+    `BedControl: ${side} body position out ${percent(weights.out)}% cen ${percent(weights.cen)}% in ${percent(weights.in)}%, `
+    + 'learning paused 20 min',
+  );
+};
+
+const bodyValue = (side: Side, zones: CapZones, cap: CapZones | null | undefined) => {
+  const baseline = isPresent(side) && cap ? capBaseline(side) : null;
+  const weights = baseline && cap ? bodyWeights(cap, baseline) : null;
+  if (!weights) {
+    if (!isPresent(side)) delete position[side];
+    return zones.cen;
+  }
+  notePosition(side, weights);
+  return weights.out * zones.out + weights.cen * zones.cen + weights.in * zones.in;
+};
+
+const probeValue = (side: Side, zones: CapZones, cap: CapZones | null | undefined) => {
   switch (comfortDB.data.surfaceControl?.probe) {
+  case 'body': return bodyValue(side, zones, cap);
   case 'avg': return (zones.out + zones.cen + zones.in) / 3;
   case 'max': return Math.max(zones.out, zones.cen, zones.in);
   case 'min': return Math.min(zones.out, zones.cen, zones.in);
@@ -61,8 +126,8 @@ const probeValue = (zones: { out: number; cen: number; in: number }) => {
 export const sampleSurface = (sensors: SensorSnapshot | null) => {
   const now = Date.now();
   if (sensors?.surfaceF && now / 1000 - sensors.ts < SURFACE_STALE_SECONDS) {
-    samples.left.push({ at: now, f: probeValue(sensors.surfaceF.left) });
-    samples.right.push({ at: now, f: probeValue(sensors.surfaceF.right) });
+    samples.left.push({ at: now, f: probeValue('left', sensors.surfaceF.left, sensors.capacitance?.left) });
+    samples.right.push({ at: now, f: probeValue('right', sensors.surfaceF.right, sensors.capacitance?.right) });
   }
   for (const side of ['left', 'right'] as Side[]) {
     while (samples[side].length && now - samples[side][0].at > SURFACE_WINDOW_MS) samples[side].shift();
@@ -177,6 +242,7 @@ export const correctBed = (side: Side): { setpointF: number; bedF: number; offse
   const bedF = bedTemperatureF(side);
   if (!current || bedF === null) return null;
   if (current.learnAfter && current.learnAfter > Date.now()) return null;
+  if ((position[side]?.pauseUntil ?? 0) > Date.now()) return null;
   const errorF = current.setpointF - bedF;
   if (Math.abs(errorF) < DEADBAND_F) return null;
   const offsetF = Math.max(-MAX_OFFSET_F, Math.min(MAX_OFFSET_F, current.offsetF + GAIN_PER_MIN * errorF));

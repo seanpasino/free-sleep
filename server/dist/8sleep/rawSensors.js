@@ -8,7 +8,7 @@ const TAIL_BYTES = 256 * 1024;
 const STALE_SECONDS = 10 * 60;
 const RECORD_MARKER = Buffer.from([0xa2, 0x63, 0x73, 0x65, 0x71]); // map(2), "seq"
 const DATA_KEY = Buffer.from([0x64, 0x64, 0x61, 0x74, 0x61]); // "data"
-const WANTED_TYPES = ['bedTemp', 'frzTemp', 'frzTherm'];
+const WANTED_TYPES = ['bedTemp', 'frzTemp', 'frzTherm', 'capSense'];
 const centiCToF = (centiC) => Math.round((centiC / 100 * 9 / 5 + 32) * 10) / 10;
 const cToF = (c) => Math.round((c * 9 / 5 + 32) * 10) / 10;
 const newestRawFiles = (count) => {
@@ -103,7 +103,7 @@ const latestRecords = (wantedTypes = WANTED_TYPES) => {
 // The newest record of each type in the last two RAW files (for the Telemetry page)
 export const readLatestRecords = (types) => latestRecords(types);
 export const readLatestSensors = () => {
-    const { bedTemp, frzTemp, frzTherm } = latestRecords();
+    const { bedTemp, frzTemp, frzTherm, capSense } = latestRecords();
     if (!bedTemp)
         return null;
     const fresh = (record) => record && Date.now() / 1000 - record.ts < STALE_SECONDS;
@@ -117,6 +117,7 @@ export const readLatestSensors = () => {
         in: centiCToF(side.in),
         side: centiCToF(side.side),
     });
+    const capZones = (side) => (side?.status === 'good' ? { out: side.out, cen: side.cen, in: side.in } : null);
     return {
         ts: bedTemp.ts,
         roomF: roomCentiC === null ? null : centiCToF(roomCentiC),
@@ -126,6 +127,7 @@ export const readLatestSensors = () => {
         heatingEnabled: frzTherm ? { left: !!frzTherm.left.enabled, right: !!frzTherm.right.enabled } : null,
         power: frzTherm ? { left: frzTherm.left.power, right: frzTherm.right.power } : null,
         surfaceF: { left: surface(bedTemp.left), right: surface(bedTemp.right) },
+        capacitance: fresh(capSense) ? { left: capZones(capSense.left), right: capZones(capSense.right) } : null,
     };
 };
 //# sourceMappingURL=rawSensors.js.map

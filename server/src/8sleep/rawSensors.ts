@@ -9,12 +9,13 @@ const TAIL_BYTES = 256 * 1024;
 const STALE_SECONDS = 10 * 60;
 const RECORD_MARKER = Buffer.from([0xa2, 0x63, 0x73, 0x65, 0x71]); // map(2), "seq"
 const DATA_KEY = Buffer.from([0x64, 0x64, 0x61, 0x74, 0x61]); // "data"
-const WANTED_TYPES = ['bedTemp', 'frzTemp', 'frzTherm'];
+const WANTED_TYPES = ['bedTemp', 'frzTemp', 'frzTherm', 'capSense'];
 
 type Sides<T> = { left: T; right: T };
 // out = outer edge, cen = middle of the side, in = toward the middle of the bed, side = a fourth
 // probe whose spot is undocumented (on an occupied side it tracks cen)
 type SurfaceTemps = { out: number; cen: number; in: number; side: number };
+export type CapZones = { out: number; cen: number; in: number };
 
 export type SensorSnapshot = {
   ts: number;
@@ -27,6 +28,8 @@ export type SensorSnapshot = {
   // Hub output per side, negative while cooling
   power: Sides<number> | null;
   surfaceF: Sides<SurfaceTemps> | null;
+  // Capacitance per zone (same out/cen/in as the probes); null when stale or a side's status isn't good
+  capacitance: Sides<CapZones | null> | null;
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -120,7 +123,7 @@ const latestRecords = (wantedTypes: string[] = WANTED_TYPES): Record<string, Raw
 export const readLatestRecords = (types: string[]): Record<string, RawRecord> => latestRecords(types);
 
 export const readLatestSensors = (): SensorSnapshot | null => {
-  const { bedTemp, frzTemp, frzTherm } = latestRecords();
+  const { bedTemp, frzTemp, frzTherm, capSense } = latestRecords();
   if (!bedTemp) return null;
 
   const fresh = (record?: RawRecord) => record && Date.now() / 1000 - record.ts < STALE_SECONDS;
@@ -135,6 +138,10 @@ export const readLatestSensors = (): SensorSnapshot | null => {
     side: centiCToF(side.side),
   });
 
+  const capZones = (side?: RawRecord): CapZones | null => (
+    side?.status === 'good' ? { out: side.out, cen: side.cen, in: side.in } : null
+  );
+
   return {
     ts: bedTemp.ts,
     roomF: roomCentiC === null ? null : centiCToF(roomCentiC),
@@ -144,5 +151,6 @@ export const readLatestSensors = (): SensorSnapshot | null => {
     heatingEnabled: frzTherm ? { left: !!frzTherm.left.enabled, right: !!frzTherm.right.enabled } : null,
     power: frzTherm ? { left: frzTherm.left.power, right: frzTherm.right.power } : null,
     surfaceF: { left: surface(bedTemp.left), right: surface(bedTemp.right) },
+    capacitance: fresh(capSense) ? { left: capZones(capSense.left), right: capZones(capSense.right) } : null,
   };
 };
