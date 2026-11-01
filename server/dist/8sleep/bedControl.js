@@ -27,11 +27,15 @@ const INTEGRAL_GAIN_PER_MIN = 0.07;
 const INTEGRAL_DEADBAND_F = 0.15;
 // A larger error is the bed catching up to a change; integrating it would overshoot
 const INTEGRAL_MAX_ERROR_F = 1.5;
+// Nor while the bed is already heading to the setpoint this fast (°F per min, 5 min average): the water
+// it is climbing on is enough, and more would carry it past (seen on the first live step, 2026-11-01)
+const INTEGRAL_APPROACH_RATE = 0.05;
+const TREND_SMOOTHING_MINUTES = 5;
 const MAX_OFFSET_F = 10;
-// The bed moves about 0.7°F per 1°F of water (body heat counts for less as the water warms), so a
-// setpoint 1°F warmer needs the water about 1.5°F warmer. With this the offset is the same at every
+// The bed moves about 0.72°F per 1°F of water (body heat counts for less as the water warms), so a
+// setpoint 1°F warmer needs the water about 1.4°F warmer. With this the offset is the same at every
 // setpoint, so a wake-up ramp doesn't carry over into the next night's bedtime.
-const FEED_FORWARD_SLOPE = 0.5;
+const FEED_FORWARD_SLOPE = 0.4;
 const FEED_FORWARD_REFERENCE_F = 76;
 // Probe 'body': the bed temperature is the probes weighted by where capacitance finds the sleeper.
 // Below this summed rise over the empty-bed baseline there's no reliable position (the stream's
@@ -201,6 +205,18 @@ export const setBedSetpoint = (side, setpointF) => {
     writeState(state);
     return clampF(unclampedWaterF(side, updated));
 };
+// How fast the bed is moving, for a side the loop is correcting (°F per min, averaged)
+const trend = {};
+const noteTrend = (side, bedF) => {
+    const now = Date.now();
+    const last = trend[side];
+    // A gap means the side was empty or off, so the old reading says nothing about the bed now
+    const rate = last && now - last.at <= 2 * 60 * 1000
+        ? last.rate + ((bedF - last.bedF) - last.rate) / TREND_SMOOTHING_MINUTES
+        : 0;
+    trend[side] = { bedF, at: now, rate };
+    return rate;
+};
 // One minute of the integral term for a side that is on and occupied. Returns what it did, or null
 // when it left the offset alone.
 export const correctBed = (side) => {
@@ -208,8 +224,11 @@ export const correctBed = (side) => {
     const bedF = bedTemperatureF(side);
     if (!current || bedF === null)
         return null;
+    const rate = noteTrend(side, bedF);
     const errorF = current.setpointF - bedF;
     if (Math.abs(errorF) < INTEGRAL_DEADBAND_F || Math.abs(errorF) > INTEGRAL_MAX_ERROR_F)
+        return null;
+    if (errorF * rate > 0 && Math.abs(rate) >= INTEGRAL_APPROACH_RATE)
         return null;
     // At the Pod's range limit more offset does nothing, so don't let it pile up
     const waterF = unclampedWaterF(side, current);
