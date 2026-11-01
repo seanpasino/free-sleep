@@ -4,14 +4,13 @@ import moment from 'moment-timezone';
 import { Accordion, AccordionDetails, AccordionSummary, Alert, Box, Skeleton, Typography } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import SensorsIcon from '@mui/icons-material/Sensors';
-import Header from '../Header.tsx';
-import PageContainer from '../../PageContainer.tsx';
+import PageContainer from '../PageContainer.tsx';
 import ErrorBoundary from '@components/ErrorBoundary.tsx';
 import BedMap from './BedMap.tsx';
 import { Figure, FigureGrid, formatDuration, formatNumber, formatTemp, LiveDot, OutputMeter, Row, Section } from './parts.tsx';
 import { Telemetry, useTelemetry } from '@api/telemetry.ts';
 import { useSettings } from '@api/settings.ts';
-import { COLORS } from '../../../theme.ts';
+import { COLORS } from '../../theme.ts';
 
 type Side = 'left' | 'right';
 const SIDES: Side[] = ['left', 'right'];
@@ -132,7 +131,10 @@ export default function TelemetryPage() {
 
   return (
     <PageContainer sx={ { maxWidth: '560px', alignItems: 'stretch', gap: 2, mt: 0 } }>
-      <Header title="Telemetry" icon={ <SensorsIcon/> }/>
+      <Typography variant="h6" sx={ { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 } }>
+        <SensorsIcon/>
+        Telemetry
+      </Typography>
       <Typography sx={ { fontSize: 12, color: COLORS.textTertiary, textAlign: 'center', mt: -1 } }>
         { t ? (
           <>

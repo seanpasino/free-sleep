@@ -1,7 +1,7 @@
 /* eslint-disable react/no-multi-comp */
 import { ReactNode } from 'react';
 import { Box, Card, Typography } from '@mui/material';
-import { COLORS } from '../../../theme.ts';
+import { COLORS } from '../../theme.ts';
 
 // Temperatures arrive in °F; shown in the user's unit
 export const formatTemp = (f: number | null | undefined, celsius: boolean, digits = 1) => {

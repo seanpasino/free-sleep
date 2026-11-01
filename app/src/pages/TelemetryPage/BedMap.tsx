@@ -4,7 +4,7 @@ import { Box, Tooltip, Typography } from '@mui/material';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import { Telemetry } from '@api/telemetry.ts';
 import { formatTemp, SETPOINT_SCALE_F, setpointColor, temperatureColor } from './parts.tsx';
-import { COLORS } from '../../../theme.ts';
+import { COLORS } from '../../theme.ts';
 
 type Side = 'left' | 'right';
 type Zone = 'out' | 'cen' | 'in';

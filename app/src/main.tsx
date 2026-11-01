@@ -6,7 +6,7 @@ import '@fontsource/inter/latin-500.css';
 import '@fontsource/inter/latin-600.css';
 /* eslint-enable no-restricted-imports */
 
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom';
 import { createRoot } from 'react-dom/client';
 import { CssBaseline } from '@mui/material';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -22,13 +22,13 @@ import SchedulePage from './pages/SchedulePage/SchedulePage.tsx';
 import ErrorBoundary from './components/ErrorBoundary.tsx';
 import { GlobalStyles } from '@mui/material';
 import SleepPage from './pages/DataPage/SleepPage/SleepPage.tsx';
-import TelemetryPage from './pages/DataPage/TelemetryPage/TelemetryPage.tsx';
+import TelemetryPage from './pages/TelemetryPage/TelemetryPage.tsx';
 import DataPage from './pages/DataPage/DataPage.tsx';
 import VitalsPage from './pages/DataPage/VitalsPage/VitalsPage.tsx';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
 import LogsPage from './pages/DataPage/LogsPage/LogsPage.tsx';
-import StatusPage from './pages/StatusPage/StatusPage.tsx';
+import StatusPage from './pages/DataPage/StatusPage/StatusPage.tsx';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -66,14 +66,18 @@ const App = () => {
                   <Route path="temperature" element={ <ControlTempPage/> }/>
                   <Route path="left" element={ <ControlTempPage/> }/>
                   <Route path="right" element={ <ControlTempPage/> }/>
-                  <Route path="status" element={ <StatusPage /> } />
+                  <Route path="telemetry" element={ <TelemetryPage/> }/>
 
                   <Route path="data" element={ <DataPage /> }>
                     <Route path="sleep" element={ <SleepPage/> }/>
                     <Route path="logs" element={ <LogsPage/> }/>
-                    <Route path="telemetry" element={ <TelemetryPage/> }/>
+                    <Route path="status" element={ <StatusPage /> }/>
                     <Route path="vitals" element={ <VitalsPage/> }/>
+                    { /* Old address, in case it's bookmarked */ }
+                    <Route path="telemetry" element={ <Navigate to="/telemetry" replace/> }/>
                   </Route>
+                  { /* Old address, in case it's bookmarked */ }
+                  <Route path="status" element={ <Navigate to="/data/status" replace/> }/>
 
                   <Route path="settings" element={ <SettingsPage/> }/>
                   <Route path="schedules" element={ <SchedulePage/> }/>

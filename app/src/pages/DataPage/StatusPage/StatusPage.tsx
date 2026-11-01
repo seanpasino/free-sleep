@@ -7,7 +7,10 @@ import {
 } from '@mui/material';
 import Grid from '@mui/material/GridLegacy';
 
-import PageContainer from '../PageContainer.tsx';
+import MonitorHeartOutlinedIcon from '@mui/icons-material/MonitorHeartOutlined';
+
+import Header from '../Header.tsx';
+import PageContainer from '../../PageContainer.tsx';
 import StatusCard from './StatusCard.tsx';
 import { ServerStatusKey, StatusInfo } from '@api/serverStatusSchema.ts';
 
@@ -23,10 +26,8 @@ export default function StatusPage() {
         mx: 'auto',
       } }
     >
+      <Header title="System Status" icon={ <MonitorHeartOutlinedIcon/> }/>
       <Stack spacing={ 1 } alignItems="center">
-        <Typography variant="h5" fontWeight={ 800 }>
-          Server Status
-        </Typography>
         <Typography
           variant="body2"
           sx={ {

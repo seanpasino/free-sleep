@@ -13,7 +13,7 @@ import ListItemText from '@mui/material/ListItemText';
 import Typography from '@mui/material/Typography';
 import { List, ListItem } from '@mui/material';
 import TextSnippetIcon from '@mui/icons-material/TextSnippet';
-import SensorsIcon from '@mui/icons-material/Sensors';
+import MonitorHeartOutlinedIcon from '@mui/icons-material/MonitorHeartOutlined';
 
 const SettingsList = () => {
   const navigate = useNavigate();
@@ -35,18 +35,18 @@ const SettingsList = () => {
         <ListItemText primary="Sleep"/>
         <ArrowForwardIosIcon fontSize="small" sx={ { color: 'gray' } }/>
       </ListItem>
-      <ListItem onClick={ () => navigate('/data/telemetry') }>
-        <ListItemIcon>
-          <SensorsIcon/>
-        </ListItemIcon>
-        <ListItemText primary="Telemetry"/>
-        <ArrowForwardIosIcon fontSize="small" sx={ { color: 'gray' } }/>
-      </ListItem>
       <ListItem onClick={ () => navigate('/data/logs') }>
         <ListItemIcon>
           <TextSnippetIcon/>
         </ListItemIcon>
         <ListItemText primary="Logs"/>
+        <ArrowForwardIosIcon fontSize="small" sx={ { color: 'gray' } }/>
+      </ListItem>
+      <ListItem onClick={ () => navigate('/data/status') }>
+        <ListItemIcon>
+          <MonitorHeartOutlinedIcon/>
+        </ListItemIcon>
+        <ListItemText primary="System Status"/>
         <ArrowForwardIosIcon fontSize="small" sx={ { color: 'gray' } }/>
       </ListItem>
       { /*<ListItem onClick={ () => navigate('/data/vitals') }>*/ }
