@@ -38,7 +38,7 @@ echo "Attempting to reinstall free-sleep..."
 update_succeeded=false
 # Check the download separately: running an empty script after a failed curl exits successfully,
 # which used to delete the backup and leave no install at all.
-if installer_source=$(curl -fsSL https://raw.githubusercontent.com/seanpasino/free-sleep/seanpasino/personal/scripts/install.sh) \
+if installer_source=$(curl -fsSL https://raw.githubusercontent.com/seanpassino/free-sleep/seanpasino/personal/scripts/install.sh) \
   && [ -n "$installer_source" ] \
   && /bin/bash -c "$installer_source" \
   && [ -d "$APP_DIR" ]; then

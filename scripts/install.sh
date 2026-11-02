@@ -4,7 +4,7 @@ set -euo pipefail
 
 # --------------------------------------------------------------------------------
 # Variables
-REPO_OWNER="seanpasino"
+REPO_OWNER="seanpassino"
 REPO_BRANCH="seanpasino/personal"
 REPO_URL="https://github.com/${REPO_OWNER}/free-sleep/archive/refs/heads/${REPO_BRANCH}.zip"
 ZIP_FILE="free-sleep.zip"
